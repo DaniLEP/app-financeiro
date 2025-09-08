@@ -2,20 +2,21 @@ import React, { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { createBrowserRouter, RouterProvider } from 'react-router-dom'
 import './index.css'
-import RegistroUser from './pages/Login/register_auth'
-import JovensTable from './pages/stock'
-import EntradaJovem from './pages/entradaJovens'
-import CadastroEscolaTecnica from './pages/register/escola'
-import CadastroJovem from './pages/register/jovem'
-import ListaEscolasTecnicas from './pages/views/escola'
-import ListaCursosTecnicos from './pages/views/curso'
-import ListaJovens from './pages/views/jovens'
-import TabelaBoletos from './pages/boletos'
-import CadastroCursoTecnico from './pages/register/curso'
+// import RegistroUser from './pages/Login/register_auth'
+// import JovensTable from './pages/stock'
+// import EntradaJovem from './pages/entradaJovens'
+// import CadastroEscolaTecnica from './pages/register/escola'
+// import CadastroJovem from './pages/register/jovem'
+// import ListaEscolasTecnicas from './pages/views/escola'
+// import ListaCursosTecnicos from './pages/views/curso'
+// import ListaJovens from './pages/views/jovens'
+// import TabelaBoletos from './pages/boletos'
+// import CadastroCursoTecnico from './pages/register/curso'
+import ListaChamada from './pages/Home'
 
 const App = lazy(() => import('./App.jsx'))
 const Login = lazy(() => import('./pages/Login/index'))
-const Home = lazy(() => import ('./pages/Home/index'))
+// const Home = lazy(() => import ('./pages/Home/index'))
 const ErrorPage = lazy(() => import('./components/errorpage/index'))
 
 // Componente fallback com spinner simples
@@ -53,17 +54,17 @@ const router = createBrowserRouter([
     errorElement: <ErrorPage />,
     children: [
       { index: true, element: <Login /> },
-      { path: 'Home', element: <Home /> },
-      { path: 'Register', element: <RegistroUser /> },
-      { path: 'cadastrocursotecnico', element: < CadastroCursoTecnico /> },
-      { path: 'cadastroescolatecnica', element: <CadastroEscolaTecnica /> },
-      { path: 'cadastrojovem', element: <CadastroJovem /> },
-      { path: 'listacadastrojovens', element: <ListaJovens /> },
-      { path: 'listacursotecnico', element: <ListaCursosTecnicos /> },
-      { path: 'listadeescolatecnica', element: <ListaEscolasTecnicas /> },
-      { path: 'entradajovens', element: <EntradaJovem /> },
-      { path: 'estoque', element: <JovensTable /> },
-      { path: 'boletos', element: <TabelaBoletos /> },
+      { path: 'Home', element: <ListaChamada /> },
+      // { path: 'Register', element: <RegistroUser /> },
+      // { path: 'cadastrocursotecnico', element: < CadastroCursoTecnico /> },
+      // { path: 'cadastroescolatecnica', element: <CadastroEscolaTecnica /> },
+      // { path: 'cadastrojovem', element: <CadastroJovem /> },
+      // { path: 'listacadastrojovens', element: <ListaJovens /> },
+      // { path: 'listacursotecnico', element: <ListaCursosTecnicos /> },
+      // { path: 'listadeescolatecnica', element: <ListaEscolasTecnicas /> },
+      // { path: 'entradajovens', element: <EntradaJovem /> },
+      // { path: 'estoque', element: <JovensTable /> },
+      // { path: 'boletos', element: <TabelaBoletos /> },
     ],
   },
 ])
