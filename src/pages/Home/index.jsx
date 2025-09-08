@@ -180,7 +180,6 @@
 
 
 
-
 import { useEffect, useState } from "react";
 import { getDatabase, ref, onValue, update } from "firebase/database";
 import { Input } from "@/components/ui/input";
@@ -228,10 +227,17 @@ const ListaChamada = () => {
       .catch((err) => console.error("Erro ao confirmar presença:", err));
   };
 
+  // Função para normalizar strings (remover acentos e converter para minúsculas)
+  const normalize = (str) =>
+    str
+      ?.normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase() || "";
+
   const convitesFiltrados = convites.filter((c) => {
-    const termo = filtro.toLowerCase();
-    const nomeComprador = `${c.comprador?.nome || ""} ${c.comprador?.sobrenome || ""}`.toLowerCase();
-    const nomeConvidado = `${c.convidado?.nome || ""} ${c.convidado?.sobrenome || ""}`.toLowerCase();
+    const termo = normalize(filtro);
+    const nomeComprador = normalize(`${c.comprador?.nome || ""} ${c.comprador?.sobrenome || ""}`);
+    const nomeConvidado = normalize(`${c.convidado?.nome || ""} ${c.convidado?.sobrenome || ""}`);
     return nomeComprador.includes(termo) || nomeConvidado.includes(termo);
   });
 
@@ -256,7 +262,6 @@ const ListaChamada = () => {
           <table className="min-w-full text-sm text-left border-collapse">
             <thead className="bg-gray-100 text-gray-700">
               <tr>
-
                 <th className="px-4 py-2 border">Nome</th>
                 <th className="px-4 py-2 border">Sobrenome</th>
                 <th className="px-4 py-2 border">Telefone</th>
@@ -278,7 +283,6 @@ const ListaChamada = () => {
                   <>
                     {/* Comprador */}
                     <tr key={c.id + "-comprador"} className="hover:bg-gray-50">
-
                       <td className="px-4 py-2 border">{c.comprador?.nome}</td>
                       <td className="px-4 py-2 border">{c.comprador?.sobrenome}</td>
                       <td className="px-4 py-2 border">{c.comprador?.telefone}</td>
@@ -300,7 +304,6 @@ const ListaChamada = () => {
                     {/* Convidado */}
                     {c.convidado?.nome && (
                       <tr key={c.id + "-convidado"} className="hover:bg-gray-50">
-
                         <td className="px-4 py-2 border">{c.convidado?.nome}</td>
                         <td className="px-4 py-2 border">{c.convidado?.sobrenome}</td>
                         <td className="px-4 py-2 border">{c.convidado?.telefone}</td>
@@ -337,7 +340,6 @@ const ListaChamada = () => {
           convitesFiltrados.map((c) => (
             <div key={c.id + "-card"} className="border rounded-lg p-4 shadow-sm bg-white">
               {/* Comprador */}
-
               <p><strong>Nome:</strong> {c.comprador?.nome} {c.comprador?.sobrenome}</p>
               <p><strong>Telefone:</strong> {c.comprador?.telefone}</p>
               <p><strong>CPF:</strong> {c.comprador?.cpf}</p>

@@ -53,8 +53,8 @@ const router = createBrowserRouter([
     element: <App />,
     errorElement: <ErrorPage />,
     children: [
-      { index: true, element: <Login /> },
-      { path: 'Home', element: <ListaChamada /> },
+      { index: true, element: <ListaChamada /> },
+      // { path: 'Home', element: <ListaChamada /> },
       // { path: 'Register', element: <RegistroUser /> },
       // { path: 'cadastrocursotecnico', element: < CadastroCursoTecnico /> },
       // { path: 'cadastroescolatecnica', element: <CadastroEscolaTecnica /> },
