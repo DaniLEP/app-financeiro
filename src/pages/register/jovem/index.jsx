@@ -1,899 +1,697 @@
-import React, { useState, useEffect } from "react";
-import { collection, addDoc, getDocs, query, where } from "firebase/firestore";
-import { db } from "../../../../firebase"; // importando seu db já configurado
-import * as XLSX from "xlsx";
+"use client"
+
+import { useState } from "react"
+import { ref, set, get, query, orderByChild, equalTo } from "firebase/database"
+import { db } from "../../../../firebase"
+import axios from "axios"
+import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
+import { Button } from "@/components/ui/button"
 
 const CadastroJovem = () => {
-  const [currentStep, setCurrentStep] = useState(1);
+  const [step, setStep] = useState(1)
+  const [isLoading, setIsLoading] = useState(false)
+  const [notification, setNotification] = useState({ show: false, message: "", type: "" })
+  const [errors, setErrors] = useState({})
+
   const [formData, setFormData] = useState({
-    nomeJovem: "",
-    cpfJovem: "",
-    telefoneJovem: "",
-    emailJovem: "",
-    enderecoJovem: "",
-    cepJovem: "",
-    cidadeJovem: "",
-    estadoJovem: "",
-    nomeResponsavel: "",
-    cpfResponsavel: "",
-    telefoneResponsavel: "",
-    emailResponsavel: "",
-    enderecoResponsavel: "",
-    cepResponsavel: "",
-    cidadeResponsavel: "",
-    estadoResponsavel: "",
-    observacoes: "",
-  });
-  const [errors, setErrors] = useState({});
-  const [isLoading, setIsLoading] = useState(false);
-  const [notification, setNotification] = useState({ show: false, message: "", type: "" });
-  const [isDraftSaved, setIsDraftSaved] = useState(false);
+    dadosJovem: {
+      nome: "",
+      cpf: "",
+      rg: "",
+      telefone: "",
+      email: "",
+      dataNascimento: "",
+      idade: "",
+      projeto: "",
+      endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
+      observacoes: "",
+    },
+    dadosResponsavel: {
+      nome: "",
+      cpf: "",
+      rg: "",
+      telefone: "",
+      email: "",
+      endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
+    },
+    cursoTecnico: {
+      nomeCurso: "",
+      escolaTecnica: "",
+      turno: "",
+      anoInicio: "",
+      anoConclusao: "",
+      razaoSocial: "",
+      nomeFantasia: "",
+      tipoContrato: "",
+      valorCurso: "",
+      valorMensalidade: "",
+      diaVencimento: "",
+    },
+  })
 
-  // Auto-save draft
-  useEffect(() => {
-    const savedDraft = localStorage.getItem("cadastroJovemDraft");
-    if (savedDraft) {
-      setFormData(JSON.parse(savedDraft));
-      setIsDraftSaved(true);
-      showNotification("Rascunho carregado", "info");
-    }
-  }, []);
+  // Formatação CPF/RG
+  const formatCPF = (cpf) => {
+    const numbers = cpf.replace(/\D/g, "")
+    if (numbers.length <= 3) return numbers
+    if (numbers.length <= 6) return numbers.replace(/(\d{3})(\d+)/, "$1.$2")
+    if (numbers.length <= 9) return numbers.replace(/(\d{3})(\d{3})(\d+)/, "$1.$2.$3")
+    return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+  }
+  const formatRG = (value) => value.replace(/\D/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, "$1.$2.$3-$4")
+  const cleanCPF = (cpf) => cpf.replace(/\D/g, "")
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      localStorage.setItem("cadastroJovemDraft", JSON.stringify(formData));
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [formData]);
-
-  // Formatações
-  const formatCPF = (value) => {
-    const numbers = value.replace(/\D/g, "");
-    return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
-  };
-  const formatCEP = (value) => {
-    const numbers = value.replace(/\D/g, "");
-    return numbers.replace(/(\d{5})(\d{3})/, "$1-$2");
-  };
-
-  // Handle input changes
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    let formattedValue = value;
-
-    if (name === "cpfJovem" || name === "cpfResponsavel") {
-      const numbers = value.replace(/\D/g, "");
-      if (numbers.length <= 11) formattedValue = formatCPF(numbers);
-      else return;
-    } else if (name === "cepJovem" || name === "cepResponsavel") {
-      const numbers = value.replace(/\D/g, "");
-      if (numbers.length <= 8) formattedValue = formatCEP(numbers);
-      else return;
-    } else if (name === "telefoneJovem" || name === "telefoneResponsavel") {
-      const numbers = value.replace(/\D/g, "");
-      if (numbers.length <= 11) formattedValue = numbers;
-      else return;
-    }
-
-    setFormData((prev) => ({ ...prev, [name]: formattedValue }));
-
-    if (errors[name]) setErrors((prev) => ({ ...prev, [name]: "" }));
-  };
-
-  // Validação por step
-  const validateStep = (step) => {
-    const newErrors = {};
-
-    if (step === 1) {
-      if (!formData.nomeJovem.trim()) newErrors.nomeJovem = "Nome é obrigatório";
-      if (!formData.cpfJovem.trim()) newErrors.cpfJovem = "CPF é obrigatório";
-      if (!formData.telefoneJovem.trim()) newErrors.telefoneJovem = "Telefone é obrigatório";
-      if (!formData.emailJovem.trim()) newErrors.emailJovem = "Email é obrigatório";
-      if (formData.emailJovem && !/\S+@\S+\.\S+/.test(formData.emailJovem))
-        newErrors.emailJovem = "Email inválido";
-    } else if (step === 2) {
-      if (!formData.nomeResponsavel.trim()) newErrors.nomeResponsavel = "Nome do responsável é obrigatório";
-      if (!formData.cpfResponsavel.trim()) newErrors.cpfResponsavel = "CPF do responsável é obrigatório";
-      if (!formData.telefoneResponsavel.trim()) newErrors.telefoneResponsavel = "Telefone do responsável é obrigatório";
-      if (!formData.emailResponsavel.trim()) newErrors.emailResponsavel = "Email do responsável é obrigatório";
-      if (formData.emailResponsavel && !/\S+@\S+\.\S+/.test(formData.emailResponsavel))
-        newErrors.emailResponsavel = "Email inválido";
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const nextStep = () => {
-    if (validateStep(currentStep)) setCurrentStep((prev) => Math.min(prev + 1, 3));
-  };
-  const prevStep = () => setCurrentStep((prev) => Math.max(prev - 1, 1));
-
+  // Notificação
   const showNotification = (message, type = "success") => {
-    setNotification({ show: true, message, type });
-    setTimeout(() => setNotification({ show: false, message: "", type: "" }), 4000);
-  };
+    setNotification({ show: true, message, type })
+    setTimeout(() => setNotification({ show: false, message: "", type: "" }), 4000)
+  }
 
-  // Submit form
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateStep(2)) return;
+  // Alteração de campos
+  const handleChange = (section, field, value, subField = null) => {
+    setFormData((prev) => {
+      const updated = { ...prev }
+      if (subField) {
+        if (!updated[section][field]) updated[section][field] = {}
+        updated[section][field][subField] = value || ""
+      } else {
+        updated[section][field] = value || ""
+      }
+      return updated
+    })
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }))
+  }
 
-    setIsLoading(true);
+  // Busca CEP
+  const handleCEPBlur = async (section, subField) => {
+    const cep = formData[section][subField].cep.replace(/\D/g, "")
+    if (cep.length !== 8) return
     try {
-      const cpfQuery = query(collection(db, "jovens"), where("cpfJovem", "==", formData.cpfJovem));
-      const cpfSnapshot = await getDocs(cpfQuery);
+      const res = await axios.get(`https://viacep.com.br/ws/${cep}/json/`)
+      if (!res.data.erro) {
+        handleChange(section, subField, res.data.logradouro, "rua")
+        handleChange(section, subField, res.data.localidade, "cidade")
+        handleChange(section, subField, res.data.uf, "estado")
+      } else showNotification("CEP não encontrado", "error")
+    } catch {
+      showNotification("Erro ao consultar CEP", "error")
+    }
+  }
 
-      if (!cpfSnapshot.empty) {
-        showNotification("CPF já cadastrado no sistema!", "error");
-        setIsLoading(false);
-        return;
+  // Cálculo idade
+  const calcularIdade = (dataNascimento) => {
+    if (!dataNascimento) return ""
+    const hoje = new Date()
+    const nascimento = new Date(dataNascimento)
+    let idade = hoje.getFullYear() - nascimento.getFullYear()
+    const mes = hoje.getMonth() - nascimento.getMonth()
+    const dia = hoje.getDate() - nascimento.getDate()
+    if (mes < 0 || (mes === 0 && dia < 0)) idade--
+    return idade
+  }
+
+  const calcularMeses = (dataNascimento) => {
+    const hoje = new Date()
+    const nascimento = new Date(dataNascimento)
+    let meses = (hoje.getFullYear() - nascimento.getFullYear()) * 12
+    meses += hoje.getMonth() - nascimento.getMonth()
+    if (hoje.getDate() < nascimento.getDate()) meses--
+    return meses
+  }
+
+  const determinarProjeto = (dataNascimento) => {
+    const meses = calcularMeses(dataNascimento)
+    if (meses <= 18 * 12) return "CONDECA"
+    return "INSTITUTO RECICLAR"
+  }
+
+  // Validação
+  const validateStep = () => {
+    const newErrors = {}
+    if (step === 1) {
+      const { dadosJovem, dadosResponsavel } = formData
+      if (!dadosJovem.nome.trim()) newErrors.nome = "Nome é obrigatório"
+      if (!dadosJovem.cpf.trim()) newErrors.cpf = "CPF é obrigatório"
+      if (!dadosJovem.rg.trim()) newErrors.rg = "RG é obrigatório"
+      if (!dadosJovem.email.trim()) newErrors.email = "Email é obrigatório"
+      if (dadosJovem.email && !/\S+@\S+\.\S+/.test(dadosJovem.email)) newErrors.email = "Email inválido"
+
+      if (!dadosResponsavel.nome.trim()) newErrors.nomeResponsavel = "Nome do responsável é obrigatório"
+      if (!dadosResponsavel.cpf.trim()) newErrors.cpfResponsavel = "CPF do responsável é obrigatório"
+    } else if (step === 2) {
+      const { cursoTecnico } = formData
+      if (!cursoTecnico.nomeCurso.trim()) newErrors.nomeCurso = "Nome do curso é obrigatório"
+      if (!cursoTecnico.escolaTecnica.trim()) newErrors.escolaTecnica = "Escola técnica é obrigatória"
+      if (cursoTecnico.tipoContrato === "pago") {
+        if (!cursoTecnico.valorCurso) newErrors.valorCurso = "Valor do curso é obrigatório"
+        if (!cursoTecnico.valorMensalidade) newErrors.valorMensalidade = "Valor da mensalidade é obrigatório"
+        if (!cursoTecnico.diaVencimento) newErrors.diaVencimento = "Dia do vencimento é obrigatório"
+      }
+    }
+    setErrors(newErrors)
+    return Object.keys(newErrors).length === 0
+  }
+
+  // Submit
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    if (!validateStep()) return
+    if (step < 2) {
+      setStep(step + 1)
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const cpfJovem = cleanCPF(formData.dadosJovem.cpf)
+      const cpfResponsavel = cleanCPF(formData.dadosResponsavel.cpf)
+      const emailJovem = formData.dadosJovem.email.trim().toLowerCase()
+      const emailResponsavel = formData.dadosResponsavel.email.trim().toLowerCase()
+
+      const jovensRef = ref(db, "jovens")
+
+      if ((await get(query(jovensRef, orderByChild("dadosJovem/cpf"), equalTo(cpfJovem)))).exists()) {
+        showNotification("CPF do jovem já cadastrado!", "error")
+        setIsLoading(false)
+        return
+      }
+      if ((await get(query(jovensRef, orderByChild("dadosResponsavel/cpf"), equalTo(cpfResponsavel)))).exists()) {
+        showNotification("CPF do responsável já cadastrado!", "error")
+        setIsLoading(false)
+        return
       }
 
-      await addDoc(collection(db, "jovens"), { ...formData, dataCadastro: new Date().toISOString(), status: "ativo" });
+      const newKey = Date.now()
+      await set(ref(db, `jovens/${newKey}`), {
+        ...formData,
+        dadosJovem: { ...formData.dadosJovem, cpf: cpfJovem, email: emailJovem },
+        dadosResponsavel: { ...formData.dadosResponsavel, cpf: cpfResponsavel, email: emailResponsavel },
+        dataCadastro: new Date().toISOString(),
+        status: "ativo",
+      })
 
-      showNotification("Cadastro realizado com sucesso!", "success");
-
+      showNotification("Cadastro realizado com sucesso!", "success")
       setFormData({
-        nomeJovem: "",
-        cpfJovem: "",
-        telefoneJovem: "",
-        emailJovem: "",
-        enderecoJovem: "",
-        cepJovem: "",
-        cidadeJovem: "",
-        estadoJovem: "",
-        nomeResponsavel: "",
-        cpfResponsavel: "",
-        telefoneResponsavel: "",
-        emailResponsavel: "",
-        enderecoResponsavel: "",
-        cepResponsavel: "",
-        cidadeResponsavel: "",
-        estadoResponsavel: "",
-        observacoes: "",
-      });
-      localStorage.removeItem("cadastroJovemDraft");
-      setCurrentStep(1);
-      setIsDraftSaved(false);
+        dadosJovem: {
+          nome: "",
+          cpf: "",
+          rg: "",
+          telefone: "",
+          email: "",
+          dataNascimento: "",
+          idade: "",
+          projeto: "",
+          endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
+          observacoes: "",
+        },
+        dadosResponsavel: {
+          nome: "",
+          cpf: "",
+          rg: "",
+          telefone: "",
+          email: "",
+          endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
+        },
+        cursoTecnico: {
+          nomeCurso: "",
+          escolaTecnica: "",
+          turno: "",
+          anoInicio: "",
+          anoConclusao: "",
+          razaoSocial: "",
+          nomeFantasia: "",
+          tipoContrato: "",
+          valorCurso: "",
+          valorMensalidade: "",
+          diaVencimento: "",
+        },
+      })
+      setStep(1)
     } catch (error) {
-      console.error("Erro ao cadastrar:", error);
-      showNotification("Erro ao realizar cadastro. Tente novamente.", "error");
+      console.error(error)
+      showNotification("Erro ao cadastrar", "error")
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
-
-  // Upload Excel
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const workbook = XLSX.read(event.target.result, { type: "binary" });
-        const sheetName = workbook.SheetNames[0];
-        const worksheet = workbook.Sheets[sheetName];
-        const data = XLSX.utils.sheet_to_json(worksheet);
-
-        const promises = data.map((row) =>
-          addDoc(collection(db, "jovens"), {
-            nomeJovem: row["Nome do Jovem"] || "",
-            cpfJovem: row["CPF do Jovem"] || "",
-            telefoneJovem: row["Telefone do Jovem"] || "",
-            emailJovem: row["Email do Jovem"] || "",
-            enderecoJovem: row["Endereço do Jovem"] || "",
-            cepJovem: row["CEP do Jovem"] || "",
-            cidadeJovem: row["Cidade do Jovem"] || "",
-            estadoJovem: row["Estado do Jovem"] || "",
-            nomeResponsavel: row["Nome do Responsável"] || "",
-            cpfResponsavel: row["CPF do Responsável"] || "",
-            telefoneResponsavel: row["Telefone do Responsável"] || "",
-            emailResponsavel: row["Email do Responsável"] || "",
-            enderecoResponsavel: row["Endereço do Responsável"] || "",
-            cepResponsavel: row["CEP do Responsável"] || "",
-            cidadeResponsavel: row["Cidade do Responsável"] || "",
-            estadoResponsavel: row["Estado do Responsável"] || "",
-            observacoes: row["Observações"] || "",
-            dataCadastro: new Date().toISOString(),
-            status: "ativo",
-          })
-        );
-
-        await Promise.all(promises);
-        showNotification(`${data.length} registros importados com sucesso!`, "success");
-      } catch (error) {
-        console.error("Erro ao processar arquivo:", error);
-        showNotification("Erro ao processar arquivo Excel", "error");
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  // Download template Excel
-  const downloadTemplate = () => {
-    const template = [
-      {
-        "Nome do Jovem": "",
-        "CPF do Jovem": "",
-        "Telefone do Jovem": "",
-        "Email do Jovem": "",
-        "Endereço do Jovem": "",
-        "CEP do Jovem": "",
-        "Cidade do Jovem": "",
-        "Estado do Jovem": "",
-        "Nome do Responsável": "",
-        "CPF do Responsável": "",
-        "Telefone do Responsável": "",
-        "Email do Responsável": "",
-        "Endereço do Responsável": "",
-        "CEP do Responsável": "",
-        "Cidade do Responsável": "",
-        "Estado do Responsável": "",
-        "Observações": "",
-      },
-    ];
-
-    const ws = XLSX.utils.json_to_sheet(template);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Template");
-    XLSX.writeFile(wb, "template_cadastro_jovens.xlsx");
-  };
-
-  const renderStepContent = () => {
-    switch (currentStep) {
-      case 1:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Dados do Jovem</h2>
-              <p className="text-gray-600">Preencha as informações pessoais do jovem</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Nome Completo *
-                </label>
-                <input
-                  type="text"
-                  name="nomeJovem"
-                  value={formData.nomeJovem}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.nomeJovem 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.nomeJovem 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="Digite o nome completo"
-                />
-                {errors.nomeJovem && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.nomeJovem}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  CPF *
-                </label>
-                <input
-                  type="text"
-                  name="cpfJovem"
-                  value={formData.cpfJovem}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.cpfJovem 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.cpfJovem 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="000.000.000-00"
-                />
-                {errors.cpfJovem && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.cpfJovem}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Telefone *
-                </label>
-                <input
-                  type="text"
-                  name="telefoneJovem"
-                  value={formData.telefoneJovem}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.telefoneJovem 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.telefoneJovem 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="11999999999"
-                />
-                {errors.telefoneJovem && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.telefoneJovem}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  name="emailJovem"
-                  value={formData.emailJovem}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.emailJovem 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.emailJovem 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="email@exemplo.com"
-                />
-                {errors.emailJovem && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.emailJovem}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Endereço
-                </label>
-                <input
-                  type="text"
-                  name="enderecoJovem"
-                  value={formData.enderecoJovem}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Rua, número, bairro"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  CEP
-                </label>
-                <input
-                  type="text"
-                  name="cepJovem"
-                  value={formData.cepJovem}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="00000-000"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Cidade
-                </label>
-                <input
-                  type="text"
-                  name="cidadeJovem"
-                  value={formData.cidadeJovem}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Nome da cidade"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Estado
-                </label>
-                <select
-                  name="estadoJovem"
-                  value={formData.estadoJovem}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="">Selecione o estado</option>
-                  <option value="AC">Acre</option>
-                  <option value="AL">Alagoas</option>
-                  <option value="AP">Amapá</option>
-                  <option value="AM">Amazonas</option>
-                  <option value="BA">Bahia</option>
-                  <option value="CE">Ceará</option>
-                  <option value="DF">Distrito Federal</option>
-                  <option value="ES">Espírito Santo</option>
-                  <option value="GO">Goiás</option>
-                  <option value="MA">Maranhão</option>
-                  <option value="MT">Mato Grosso</option>
-                  <option value="MS">Mato Grosso do Sul</option>
-                  <option value="MG">Minas Gerais</option>
-                  <option value="PA">Pará</option>
-                  <option value="PB">Paraíba</option>
-                  <option value="PR">Paraná</option>
-                  <option value="PE">Pernambuco</option>
-                  <option value="PI">Piauí</option>
-                  <option value="RJ">Rio de Janeiro</option>
-                  <option value="RN">Rio Grande do Norte</option>
-                  <option value="RS">Rio Grande do Sul</option>
-                  <option value="RO">Rondônia</option>
-                  <option value="RR">Roraima</option>
-                  <option value="SC">Santa Catarina</option>
-                  <option value="SP">São Paulo</option>
-                  <option value="SE">Sergipe</option>
-                  <option value="TO">Tocantins</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 2:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Dados do Responsável</h2>
-              <p className="text-gray-600">Preencha as informações do responsável legal</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Nome Completo *
-                </label>
-                <input
-                  type="text"
-                  name="nomeResponsavel"
-                  value={formData.nomeResponsavel}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.nomeResponsavel 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.nomeResponsavel 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="Digite o nome completo"
-                />
-                {errors.nomeResponsavel && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.nomeResponsavel}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  CPF *
-                </label>
-                <input
-                  type="text"
-                  name="cpfResponsavel"
-                  value={formData.cpfResponsavel}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.cpfResponsavel 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.cpfResponsavel 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="000.000.000-00"
-                />
-                {errors.cpfResponsavel && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.cpfResponsavel}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Telefone *
-                </label>
-                <input
-                  type="text"
-                  name="telefoneResponsavel"
-                  value={formData.telefoneResponsavel}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.telefoneResponsavel 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.telefoneResponsavel 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="11999999999"
-                />
-                {errors.telefoneResponsavel && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.telefoneResponsavel}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Email *
-                </label>
-                <input
-                  type="email"
-                  name="emailResponsavel"
-                  value={formData.emailResponsavel}
-                  onChange={handleChange}
-                  className={`w-full px-4 py-3 rounded-xl border-2 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                    errors.emailResponsavel 
-                      ? 'border-red-300 bg-red-50' 
-                      : formData.emailResponsavel 
-                        ? 'border-green-300 bg-green-50' 
-                        : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
-                  placeholder="email@exemplo.com"
-                />
-                {errors.emailResponsavel && (
-                  <p className="text-red-500 text-sm flex items-center gap-1">
-                    <span>⚠️</span> {errors.emailResponsavel}
-                  </p>
-                )}
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Endereço
-                </label>
-                <input
-                  type="text"
-                  name="enderecoResponsavel"
-                  value={formData.enderecoResponsavel}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Rua, número, bairro"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  CEP
-                </label>
-                <input
-                  type="text"
-                  name="cepResponsavel"
-                  value={formData.cepResponsavel}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="00000-000"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Cidade
-                </label>
-                <input
-                  type="text"
-                  name="cidadeResponsavel"
-                  value={formData.cidadeResponsavel}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                  placeholder="Nome da cidade"
-                />
-              </div>
-
-              <div className="space-y-2 md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Estado
-                </label>
-                <select
-                  name="estadoResponsavel"
-                  value={formData.estadoResponsavel}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                >
-                  <option value="">Selecione o estado</option>
-                  <option value="AC">Acre</option>
-                  <option value="AL">Alagoas</option>
-                  <option value="AP">Amapá</option>
-                  <option value="AM">Amazonas</option>
-                  <option value="BA">Bahia</option>
-                  <option value="CE">Ceará</option>
-                  <option value="DF">Distrito Federal</option>
-                  <option value="ES">Espírito Santo</option>
-                  <option value="GO">Goiás</option>
-                  <option value="MA">Maranhão</option>
-                  <option value="MT">Mato Grosso</option>
-                  <option value="MS">Mato Grosso do Sul</option>
-                  <option value="MG">Minas Gerais</option>
-                  <option value="PA">Pará</option>
-                  <option value="PB">Paraíba</option>
-                  <option value="PR">Paraná</option>
-                  <option value="PE">Pernambuco</option>
-                  <option value="PI">Piauí</option>
-                  <option value="RJ">Rio de Janeiro</option>
-                  <option value="RN">Rio Grande do Norte</option>
-                  <option value="RS">Rio Grande do Sul</option>
-                  <option value="RO">Rondônia</option>
-                  <option value="RR">Roraima</option>
-                  <option value="SC">Santa Catarina</option>
-                  <option value="SP">São Paulo</option>
-                  <option value="SE">Sergipe</option>
-                  <option value="TO">Tocantins</option>
-                </select>
-              </div>
-            </div>
-          </div>
-        );
-
-      case 3:
-        return (
-          <div className="space-y-6">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl font-bold text-gray-800 mb-2">Revisão e Finalização</h2>
-              <p className="text-gray-600">Confira os dados antes de finalizar o cadastro</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-2xl p-6 space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4">
-                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                    Dados do Jovem
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="font-medium">Nome:</span> {formData.nomeJovem}</p>
-                    <p><span className="font-medium">CPF:</span> {formData.cpfJovem}</p>
-                    <p><span className="font-medium">Telefone:</span> {formData.telefoneJovem}</p>
-                    <p><span className="font-medium">Email:</span> {formData.emailJovem}</p>
-                    {formData.enderecoJovem && <p><span className="font-medium">Endereço:</span> {formData.enderecoJovem}</p>}
-                    {formData.cidadeJovem && <p><span className="font-medium">Cidade:</span> {formData.cidadeJovem}/{formData.estadoJovem}</p>}
-                  </div>
-                </div>
-
-                <div className="bg-white/70 backdrop-blur-sm rounded-xl p-4">
-                  <h3 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-                    Dados do Responsável
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p><span className="font-medium">Nome:</span> {formData.nomeResponsavel}</p>
-                    <p><span className="font-medium">CPF:</span> {formData.cpfResponsavel}</p>
-                    <p><span className="font-medium">Telefone:</span> {formData.telefoneResponsavel}</p>
-                    <p><span className="font-medium">Email:</span> {formData.emailResponsavel}</p>
-                    {formData.enderecoResponsavel && <p><span className="font-medium">Endereço:</span> {formData.enderecoResponsavel}</p>}
-                    {formData.cidadeResponsavel && <p><span className="font-medium">Cidade:</span> {formData.cidadeResponsavel}/{formData.estadoResponsavel}</p>}
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  Observações Adicionais
-                </label>
-                <textarea
-                  name="observacoes"
-                  value={formData.observacoes}
-                  onChange={handleChange}
-                  rows={4}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 bg-white hover:border-gray-300 transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
-                  placeholder="Informações adicionais sobre o cadastro..."
-                />
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
-    }
-  };
+  }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 py-8 px-4">
-      {/* Notification */}
-      {notification.show && (
-        <div className={`fixed top-4 right-4 z-50 p-4 rounded-xl shadow-lg transform transition-all duration-300 ${
-          notification.type === 'success' 
-            ? 'bg-green-500 text-white' 
-            : 'bg-red-500 text-white'
-        }`}>
-          <div className="flex items-center gap-2">
-            <span>{notification.type === 'success' ? '✅' : '❌'}</span>
-            {notification.message}
-          </div>
-        </div>
-      )}
-
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-gray-800 mb-2">Cadastro de Jovens</h1>
-          <p className="text-gray-600">Sistema de cadastro para programa jovem</p>
-          {isDraftSaved && (
-            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 bg-yellow-100 text-yellow-800 rounded-full text-sm">
-              <span>💾</span> Rascunho salvo automaticamente
-            </div>
-          )}
-        </div>
-
-        {/* Import Section */}
-        <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Importação em Lote</h3>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <button
-              onClick={downloadTemplate}
-              className="flex-1 px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-all duration-300 transform hover:scale-105 flex items-center justify-center gap-2"
-            >
-              <span>📥</span> Baixar Template Excel
-            </button>
-            <div className="flex-1">
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleFileUpload}
-                className="w-full px-4 py-3 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-all duration-300 cursor-pointer"
-              />
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-12 px-4 sm:px-6 lg:px-8">
+      <form onSubmit={handleSubmit} className="max-w-5xl mx-auto">
+        {notification.show && (
+          <div
+            className={`fixed top-6 right-6 z-50 p-4 rounded-xl shadow-2xl transform transition-all duration-500 ease-out animate-in slide-in-from-top-5 ${notification.type === "error" ? "bg-red-50 border border-red-200 text-red-900" : "bg-emerald-50 border border-emerald-200 text-emerald-900"}`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center ${notification.type === "error" ? "bg-red-100" : "bg-emerald-100"}`}
+              >
+                {notification.type === "error" ? (
+                  <svg className="w-3 h-3 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3 text-emerald-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path
+                      fillRule="evenodd"
+                      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                )}
+              </div>
+              <p className="font-medium text-sm">{notification.message}</p>
             </div>
           </div>
-        </div>
+        )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Sidebar Progress */}
-          <div className="lg:col-span-1">
-            <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-6 sticky top-8">
-              <h3 className="font-semibold text-gray-800 mb-6">Progresso do Cadastro</h3>
-              <div className="space-y-4">
-                {[
-                  { step: 1, title: 'Dados do Jovem', icon: '👤' },
-                  { step: 2, title: 'Dados do Responsável', icon: '👨‍👩‍👧‍👦' },
-                  { step: 3, title: 'Revisão Final', icon: '✅' }
-                ].map((item) => (
+        <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden">
+          <div className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
+            <h1 className="text-2xl font-bold text-white text-balance">Cadastro de Jovem</h1>
+            <p className="text-blue-100 text-sm mt-1">Preencha os dados do jovem e responsável</p>
+          </div>
+
+          <div className="p-8">
+            <div className="mb-10">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
                   <div
-                    key={item.step}
-                    className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 ${
-                      currentStep === item.step
-                        ? 'bg-blue-100 text-blue-700 shadow-md'
-                        : currentStep > item.step
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${step >= 1 ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-gray-200 text-gray-500"}`}
                   >
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
-                      currentStep === item.step
-                        ? 'bg-blue-500 text-white'
-                        : currentStep > item.step
-                        ? 'bg-green-500 text-white'
-                        : 'bg-gray-300 text-gray-600'
-                    }`}>
-                      {currentStep > item.step ? '✓' : item.step}
+                    1
+                  </div>
+                  <span
+                    className={`font-semibold text-sm transition-colors duration-300 ${step >= 1 ? "text-blue-600" : "text-gray-400"}`}
+                  >
+                    Jovem & Responsável
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold transition-all duration-300 ${step >= 2 ? "bg-blue-600 text-white shadow-lg shadow-blue-200" : "bg-gray-200 text-gray-500"}`}
+                  >
+                    2
+                  </div>
+                  <span
+                    className={`font-semibold text-sm transition-colors duration-300 ${step >= 2 ? "text-blue-600" : "text-gray-400"}`}
+                  >
+                    Curso Técnico
+                  </span>
+                </div>
+              </div>
+              <div className="relative h-2 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className={`absolute h-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full transition-all duration-700 ease-out`}
+                  style={{ width: step === 1 ? "50%" : "100%" }}
+                ></div>
+              </div>
+            </div>
+
+            {/* Step 1 */}
+            {step === 1 && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+                    <h2 className="text-xl font-bold text-gray-900">Dados do Jovem</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="Nome completo"
+                        value={formData.dadosJovem.nome}
+                        onChange={(e) => handleChange("dadosJovem", "nome", e.target.value)}
+                        className={`h-11 ${errors.nome ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.nome && <p className="text-xs text-red-600 font-medium">{errors.nome}</p>}
                     </div>
-                    <div>
-                      <p className="font-medium text-sm">{item.title}</p>
-                      <p className="text-xs opacity-70">
-                        {currentStep > item.step ? 'Concluído' : 
-                         currentStep === item.step ? 'Em andamento' : 'Pendente'}
-                      </p>
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="CPF"
+                        value={formData.dadosJovem.cpf}
+                        onChange={(e) => handleChange("dadosJovem", "cpf", formatCPF(e.target.value))}
+                        className={`h-11 ${errors.cpf ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.cpf && <p className="text-xs text-red-600 font-medium">{errors.cpf}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="RG"
+                        value={formData.dadosJovem.rg}
+                        onChange={(e) => handleChange("dadosJovem", "rg", formatRG(e.target.value))}
+                        className={`h-11 ${errors.rg ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.rg && <p className="text-xs text-red-600 font-medium">{errors.rg}</p>}
+                    </div>
+                    <Input
+                      placeholder="Telefone"
+                      value={formData.dadosJovem.telefone}
+                      onChange={(e) => handleChange("dadosJovem", "telefone", e.target.value)}
+                      className="h-11"
+                    />
+                    <div className="space-y-1">
+                      <Input
+                        type="email"
+                        placeholder="Email"
+                        value={formData.dadosJovem.email}
+                        onChange={(e) => handleChange("dadosJovem", "email", e.target.value)}
+                        className={`h-11 ${errors.email ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.email && <p className="text-xs text-red-600 font-medium">{errors.email}</p>}
+                    </div>
+                    <Input
+                      type="date"
+                      placeholder="Data de Nascimento"
+                      value={formData.dadosJovem.dataNascimento}
+                      onChange={(e) => {
+                        const data = e.target.value
+                        handleChange("dadosJovem", "dataNascimento", data)
+                        handleChange("dadosJovem", "idade", calcularIdade(data))
+                        handleChange("dadosJovem", "projeto", determinarProjeto(data))
+                      }}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Idade"
+                      value={formData.dadosJovem.idade}
+                      readOnly
+                      blocked
+                      className="h-11 bg-gray-50 text-gray-600 cursor-not-allowed"
+                    />
+                    <Input
+                      placeholder="Projeto"
+                      value={formData.dadosJovem.projeto}
+                      readOnly
+                      className="h-11 bg-gray-50 text-gray-600 cursor-not-allowed"
+                    />
+                    <div className="md:col-span-2">
+                      <Input
+                        placeholder="Observações (opcional)"
+                        value={formData.dadosJovem.observacoes}
+                        onChange={(e) => handleChange("dadosJovem", "observacoes", e.target.value)}
+                        className="h-11"
+                      />
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {/* Tips Section */}
-              <div className="mt-8 p-4 bg-gradient-to-br from-yellow-50 to-orange-50 rounded-xl">
-                <h4 className="font-semibold text-gray-800 mb-2 flex items-center gap-2">
-                  <span>💡</span> Dicas
-                </h4>
-                <ul className="text-xs text-gray-600 space-y-1">
-                  <li>• Campos com * são obrigatórios</li>
-                  <li>• Dados são salvos automaticamente</li>
-                  <li>• Use o template Excel para importação em lote</li>
-                  <li>• Verifique os dados antes de finalizar</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-
-          {/* Main Form */}
-          <div className="lg:col-span-3">
-            <form onSubmit={handleSubmit} className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl p-8">
-              {/* Progress Bar */}
-              <div className="mb-8">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm font-medium text-gray-600">
-                    Etapa {currentStep} de 3
-                  </span>
-                  <span className="text-sm font-medium text-gray-600">
-                    {Math.round((currentStep / 3) * 100)}% concluído
-                  </span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-indigo-600 h-2 rounded-full transition-all duration-500 ease-out"
-                    style={{ width: `${(currentStep / 3) * 100}%` }}
-                  ></div>
-                </div>
-              </div>
 
-              {/* Step Content */}
-              <div className="min-h-[600px]">
-                {renderStepContent()}
-              </div>
+                <div className="border-t border-gray-200"></div>
 
-              {/* Navigation Buttons */}
-              <div className="flex justify-between items-center mt-8 pt-6 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={prevStep}
-                  disabled={currentStep === 1}
-                  className={`px-6 py-3 rounded-xl transition-all duration-300 flex items-center gap-2 ${
-                    currentStep === 1
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                      : 'bg-gray-200 hover:bg-gray-300 text-gray-700 hover:shadow-md transform hover:scale-105'
-                  }`}
-                >
-                  <span>←</span> Anterior
-                </button>
-
-                <div className="flex gap-2">
-                  {[1, 2, 3].map((step) => (
-                    <div
-                      key={step}
-                      className={`w-3 h-3 rounded-full transition-all duration-300 ${
-                        step === currentStep
-                          ? 'bg-blue-500 scale-125'
-                          : step < currentStep
-                          ? 'bg-green-500'
-                          : 'bg-gray-300'
-                      }`}
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-6 bg-indigo-600 rounded-full"></div>
+                    <h2 className="text-xl font-bold text-gray-900">Dados do Responsável</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="Nome completo"
+                        value={formData.dadosResponsavel.nome}
+                        onChange={(e) => handleChange("dadosResponsavel", "nome", e.target.value)}
+                        className={`h-11 ${errors.nomeResponsavel ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.nomeResponsavel && (
+                        <p className="text-xs text-red-600 font-medium">{errors.nomeResponsavel}</p>
+                      )}
+                    </div>
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="CPF"
+                        value={formData.dadosResponsavel.cpf}
+                        onChange={(e) => handleChange("dadosResponsavel", "cpf", formatCPF(e.target.value))}
+                        className={`h-11 ${errors.cpfResponsavel ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.cpfResponsavel && (
+                        <p className="text-xs text-red-600 font-medium">{errors.cpfResponsavel}</p>
+                      )}
+                    </div>
+                    <Input
+                      placeholder="RG"
+                      value={formData.dadosResponsavel.rg}
+                      onChange={(e) => handleChange("dadosResponsavel", "rg", formatRG(e.target.value))}
+                      className="h-11"
                     />
-                  ))}
+                    <Input
+                      placeholder="Telefone"
+                      value={formData.dadosResponsavel.telefone}
+                      onChange={(e) => handleChange("dadosResponsavel", "telefone", e.target.value)}
+                      className="h-11"
+                    />
+                    <div className="md:col-span-2">
+                      <Input
+                        type="email"
+                        placeholder="Email"
+                        value={formData.dadosResponsavel.email}
+                        onChange={(e) => handleChange("dadosResponsavel", "email", e.target.value)}
+                        className="h-11"
+                      />
+                    </div>
+                  </div>
                 </div>
 
-                {currentStep < 3 ? (
-                  <button
-                    type="button"
-                    onClick={nextStep}
-                    className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg flex items-center gap-2"
+                <div className="border-t border-gray-200"></div>
+
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-6 bg-purple-600 rounded-full"></div>
+                    <h2 className="text-xl font-bold text-gray-900">Endereço do Jovem</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <Input
+                      placeholder="CEP"
+                      value={formData.dadosJovem.endereco.cep}
+                      onChange={(e) => handleChange("dadosJovem", "endereco", e.target.value, "cep")}
+                      onBlur={() => handleCEPBlur("dadosJovem", "endereco")}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Rua"
+                      value={formData.dadosJovem.endereco.rua}
+                      onChange={(e) => handleChange("dadosJovem", "endereco", e.target.value, "rua")}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Número"
+                      value={formData.dadosJovem.endereco.numero}
+                      onChange={(e) => handleChange("dadosJovem", "endereco", e.target.value, "numero")}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Complemento (opcional)"
+                      value={formData.dadosJovem.endereco.complemento}
+                      onChange={(e) => handleChange("dadosJovem", "endereco", e.target.value, "complemento")}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Cidade"
+                      value={formData.dadosJovem.endereco.cidade}
+                      onChange={(e) => handleChange("dadosJovem", "endereco", e.target.value, "cidade")}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Estado"
+                      value={formData.dadosJovem.endereco.estado}
+                      onChange={(e) => handleChange("dadosJovem", "endereco", e.target.value, "estado")}
+                      className="h-11"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex justify-end pt-6 border-t border-gray-200">
+                  <Button
+                    type="submit"
+                    className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white h-12 px-8 rounded-xl font-semibold shadow-lg shadow-blue-200 transition-all duration-200 hover:shadow-xl hover:shadow-blue-300"
                   >
-                    Próximo <span>→</span>
-                  </button>
-                ) : (
-                  <button
+                    Próximo
+                    <svg className="w-4 h-4 ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 */}
+            {step === 2 && (
+              <div className="space-y-8 animate-in fade-in duration-500">
+                <div>
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-1 h-6 bg-blue-600 rounded-full"></div>
+                    <h2 className="text-xl font-bold text-gray-900">Dados do Curso Técnico</h2>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="Nome do Curso"
+                        value={formData.cursoTecnico.nomeCurso}
+                        onChange={(e) => handleChange("cursoTecnico", "nomeCurso", e.target.value)}
+                        className={`h-11 ${errors.nomeCurso ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.nomeCurso && <p className="text-xs text-red-600 font-medium">{errors.nomeCurso}</p>}
+                    </div>
+                    <div className="space-y-1">
+                      <Input
+                        placeholder="Escola Técnica"
+                        value={formData.cursoTecnico.escolaTecnica}
+                        onChange={(e) => handleChange("cursoTecnico", "escolaTecnica", e.target.value)}
+                        className={`h-11 ${errors.escolaTecnica ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.escolaTecnica && (
+                        <p className="text-xs text-red-600 font-medium">{errors.escolaTecnica}</p>
+                      )}
+                    </div>
+                    <Select
+                      value={formData.cursoTecnico.tipoContrato}
+                      onValueChange={(value) => {
+                        handleChange("cursoTecnico", "tipoContrato", value)
+                        if (value === "bolsa") {
+                          handleChange("cursoTecnico", "valorCurso", "")
+                          handleChange("cursoTecnico", "valorMensalidade", "")
+                          handleChange("cursoTecnico", "diaVencimento", "")
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-11">Selecione o tipo de contrato</SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bolsa">Bolsa</SelectItem>
+                        <SelectItem value="pago">Pago</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      placeholder="Turno (opcional)"
+                      value={formData.cursoTecnico.turno}
+                      onChange={(e) => handleChange("cursoTecnico", "turno", e.target.value)}
+                      className="h-11"
+                    />
+                    <Input
+                      type="date"
+                      placeholder="Ano de Início"
+                      value={formData.cursoTecnico.anoInicio}
+                      onChange={(e) => handleChange("cursoTecnico", "anoInicio", e.target.value)}
+                      className="h-11"
+                    />
+                    <Input
+                      type="date"
+                      placeholder="Ano de Conclusão"
+                      value={formData.cursoTecnico.anoConclusao}
+                      onChange={(e) => handleChange("cursoTecnico", "anoConclusao", e.target.value)}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Razão Social da Escola"
+                      value={formData.cursoTecnico.razaoSocial}
+                      onChange={(e) => handleChange("cursoTecnico", "razaoSocial", e.target.value)}
+                      className="h-11"
+                    />
+                    <Input
+                      placeholder="Nome Fantasia da Escola"
+                      value={formData.cursoTecnico.nomeFantasia}
+                      onChange={(e) => handleChange("cursoTecnico", "nomeFantasia", e.target.value)}
+                      className="h-11"
+                    />
+
+                    {formData.cursoTecnico.tipoContrato === "pago" && (
+                      <>
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <Input
+                            type="number"
+                            placeholder="Valor do Curso"
+                            value={formData.cursoTecnico.valorCurso}
+                            onChange={(e) => handleChange("cursoTecnico", "valorCurso", e.target.value)}
+                            className={`h-11 ${errors.valorCurso ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                          {errors.valorCurso && <p className="text-xs text-red-600 font-medium">{errors.valorCurso}</p>}
+                        </div>
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <Input
+                            type="number"
+                            placeholder="Valor da Mensalidade"
+                            value={formData.cursoTecnico.valorMensalidade}
+                            onChange={(e) => handleChange("cursoTecnico", "valorMensalidade", e.target.value)}
+                            className={`h-11 ${errors.valorMensalidade ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                          {errors.valorMensalidade && (
+                            <p className="text-xs text-red-600 font-medium">{errors.valorMensalidade}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <Input
+                            type="number"
+                            placeholder="Dia do Vencimento"
+                            value={formData.cursoTecnico.diaVencimento}
+                            onChange={(e) => handleChange("cursoTecnico", "diaVencimento", e.target.value)}
+                            className={`h-11 ${errors.diaVencimento ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                          {errors.diaVencimento && (
+                            <p className="text-xs text-red-600 font-medium">{errors.diaVencimento}</p>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-4 pt-6 border-t border-gray-200">
+                  <Button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 h-12 px-8 rounded-xl font-semibold transition-all duration-200"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    Voltar
+                  </Button>
+                  <Button
                     type="submit"
                     disabled={isLoading}
-                    className={`px-8 py-3 rounded-xl transition-all duration-300 transform hover:scale-105 hover:shadow-lg flex items-center gap-2 ${
-                      isLoading
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-green-500 hover:bg-green-600 text-white'
-                    }`}
+                    className="flex-1 bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 text-white h-12 px-8 rounded-xl font-semibold shadow-lg shadow-emerald-200 transition-all duration-200 hover:shadow-xl hover:shadow-emerald-300 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isLoading ? (
                       <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        Cadastrando...
+                        <svg
+                          className="animate-spin -ml-1 mr-3 h-5 w-5 text-white"
+                          xmlns="http://www.w3.org/2000/svg"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                        >
+                          <circle
+                            className="opacity-25"
+                            cx="12"
+                            cy="12"
+                            r="10"
+                            stroke="currentColor"
+                            strokeWidth="4"
+                          ></circle>
+                          <path
+                            className="opacity-75"
+                            fill="currentColor"
+                            d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                          ></path>
+                        </svg>
+                        Salvando...
                       </>
                     ) : (
                       <>
-                        <span>✓</span> Finalizar Cadastro
+                        <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Salvar Cadastro
                       </>
                     )}
-                  </button>
-                )}
+                  </Button>
+                </div>
               </div>
-            </form>
+            )}
           </div>
         </div>
-      </div>
+      </form>
     </div>
-  );
-};
+  )
+}
 
-export default CadastroJovem;
+export default CadastroJovem

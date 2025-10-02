@@ -9,10 +9,10 @@ import CadastroEscolaTecnica from './pages/register/escola'
 import CadastroJovem from './pages/register/jovem'
 import ListaEscolasTecnicas from './pages/views/escola'
 import ListaCursosTecnicos from './pages/views/curso'
-import ListaJovens from './pages/views/jovens'
 import TabelaBoletos from './pages/boletos'
 import CadastroCursoTecnico from './pages/register/curso'
 import Home from './pages/Home'
+import VisualizarJovensAvancado from './pages/views/jovens'
 
 const App = lazy(() => import('./App.jsx'))
 const Login = lazy(() => import('./pages/Login/index'))
@@ -59,7 +59,7 @@ const router = createBrowserRouter([
       { path: 'cadastrocursotecnico', element: < CadastroCursoTecnico /> },
       { path: 'cadastroescolatecnica', element: <CadastroEscolaTecnica /> },
       { path: 'cadastrojovem', element: <CadastroJovem /> },
-      { path: 'listacadastrojovens', element: <ListaJovens /> },
+      { path: 'listacadastrojovens', element: <VisualizarJovensAvancado /> },
       { path: 'listacursotecnico', element: <ListaCursosTecnicos /> },
       { path: 'listadeescolatecnica', element: <ListaEscolasTecnicas /> },
       { path: 'entradajovens', element: <EntradaJovem /> },
