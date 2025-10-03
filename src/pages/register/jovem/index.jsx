@@ -24,6 +24,7 @@ const CadastroJovem = () => {
       dataNascimento: "",
       idade: "",
       projeto: "",
+      turma: "",
       endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
       observacoes: "",
     },
@@ -47,6 +48,7 @@ const CadastroJovem = () => {
       valorCurso: "",
       valorMensalidade: "",
       diaVencimento: "",
+      valorDesconto: "",
     },
   })
 
@@ -197,6 +199,7 @@ const CadastroJovem = () => {
           cpf: "",
           rg: "",
           telefone: "",
+          turma: "",
           email: "",
           dataNascimento: "",
           idade: "",
@@ -224,6 +227,7 @@ const CadastroJovem = () => {
           valorCurso: "",
           valorMensalidade: "",
           diaVencimento: "",
+          valorDesconto: "",
         },
       })
       setStep(1)
@@ -363,6 +367,16 @@ const CadastroJovem = () => {
                       />
                       {errors.email && <p className="text-xs text-red-600 font-medium">{errors.email}</p>}
                     </div>
+                    <div className="space-y-1">
+                      <Input
+                        type="turma"
+                        placeholder="Digite a Turma do Jovem no Reciclar"
+                        value={formData.dadosJovem.turma}
+                        onChange={(e) => handleChange("dadosJovem", "turma", e.target.value)}
+                        className={`h-11 ${errors.turma ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                      />
+                      {errors.turma && <p className="text-xs text-red-600 font-medium">{errors.turma}</p>}
+                    </div>
                     <Input
                       type="date"
                       placeholder="Data de Nascimento"
@@ -382,6 +396,7 @@ const CadastroJovem = () => {
                       blocked
                       className="h-11 bg-gray-50 text-gray-600 cursor-not-allowed"
                     />
+
                     <Input
                       placeholder="Projeto"
                       value={formData.dadosJovem.projeto}
@@ -567,20 +582,28 @@ const CadastroJovem = () => {
                       onChange={(e) => handleChange("cursoTecnico", "turno", e.target.value)}
                       className="h-11"
                     />
-                    <Input
+                    <div>
+                      <label> Ano de Início</label>
+                       <Input
                       type="date"
                       placeholder="Ano de Início"
                       value={formData.cursoTecnico.anoInicio}
                       onChange={(e) => handleChange("cursoTecnico", "anoInicio", e.target.value)}
                       className="h-11"
                     />
-                    <Input
+                    </div>
+                   
+                    <div>
+                      <label htmlFor="">Ano de Conclusão</label>
+                        <Input
                       type="date"
                       placeholder="Ano de Conclusão"
                       value={formData.cursoTecnico.anoConclusao}
                       onChange={(e) => handleChange("cursoTecnico", "anoConclusao", e.target.value)}
                       className="h-11"
                     />
+                    </div>
+                  
                     <Input
                       placeholder="Razão Social da Escola"
                       value={formData.cursoTecnico.razaoSocial}
@@ -598,7 +621,7 @@ const CadastroJovem = () => {
                       <>
                         <div className="space-y-1 animate-in fade-in duration-300">
                           <Input
-                            type="number"
+                            type="money"
                             placeholder="Valor do Curso"
                             value={formData.cursoTecnico.valorCurso}
                             onChange={(e) => handleChange("cursoTecnico", "valorCurso", e.target.value)}
@@ -618,9 +641,23 @@ const CadastroJovem = () => {
                             <p className="text-xs text-red-600 font-medium">{errors.valorMensalidade}</p>
                           )}
                         </div>
-                        <div className="space-y-1 animate-in fade-in duration-300">
+
+                                                <div className="space-y-1 animate-in fade-in duration-300">
                           <Input
                             type="number"
+                            placeholder="Valor do Desconto"
+                            value={formData.cursoTecnico.valorDesconto}
+                            onChange={(e) => handleChange("cursoTecnico", "valorDesconto", e.target.value)}
+                            className={`h-11 ${errors.valorDesconto ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                          {errors.valorDesconto && (
+                            <p className="text-xs text-red-600 font-medium">{errors.valorDesconto}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <label htmlFor="">Dia do Vencimento da parcela</label>
+                          <Input
+                            type="date"
                             placeholder="Dia do Vencimento"
                             value={formData.cursoTecnico.diaVencimento}
                             onChange={(e) => handleChange("cursoTecnico", "diaVencimento", e.target.value)}

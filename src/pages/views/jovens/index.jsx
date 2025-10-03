@@ -610,6 +610,15 @@ const exportExcel = () => {
                         </div>
 
                         <div>
+                          <Label htmlFor="valorDesconto">Valor com Desconto</Label>
+                          {isEditing ? (
+                          <Input id="valorDesconto" value={editedData.cursoTecnico.valorDesconto || ""}
+                          onChange={(e) => updateEditedField("cursoTecnico", "valorDesconto", e.target.value)} className="mt-1" />
+                          ) : (<p className="mt-1 text-slate-900 font-medium">{formatCurrency(selectedJovem.cursoTecnico.valorDesconto)}</p>
+                          )}
+                        </div>
+
+                        <div>
                           <Label htmlFor="valorMensalidade">Mensalidade</Label>
                           {isEditing ? (
                           <Input id="valorMensalidade" value={editedData.cursoTecnico.valorMensalidade || ""}
