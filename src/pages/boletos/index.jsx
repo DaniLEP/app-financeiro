@@ -1,25 +1,21 @@
+"use client"
+
 import { useEffect, useState } from "react"
-import { ref, onValue, update, push } from "firebase/database"
+import { ref, onValue, update, push, get } from "firebase/database"
 import { db } from "../../../firebase"
-import * as XLSX from "xlsx"
 import {
   Search,
   CheckCircle,
-  AlertCircle,
-  Clock,
-  DollarSign,
   FileText,
-  X,
-  TrendingUp,
-  TrendingDown,
-  Download,
-  BarChart3,
   Users,
   CreditCard,
+  Filter,
+  Calendar,
+  DollarSign,
+  AlertCircle,
 } from "lucide-react"
 
 export default function PagamentosCards() {
-  // Dados e UI
   const [jovens, setJovens] = useState([])
   const [loading, setLoading] = useState(true)
   const [filtroUnificado, setFiltroUnificado] = useState("")
@@ -30,10 +26,9 @@ export default function PagamentosCards() {
   const [modalAberta, setModalAberta] = useState(false)
   const [modalBoleto, setModalBoleto] = useState(false)
   const [jovemSelecionadoBoleto, setJovemSelecionadoBoleto] = useState(null)
-  const [visualizacao, setVisualizacao] = useState("cards") // "cards" ou "tabela"
+  const [visualizacao, setVisualizacao] = useState("cards")
   const [mostrarDashboard, setMostrarDashboard] = useState(true)
 
-  // Carrega dados e escuta alterações no Firebase
   useEffect(() => {
     const jovensRef = ref(db, "jovens")
     const unsub = onValue(
@@ -52,39 +47,89 @@ export default function PagamentosCards() {
         setLoading(false)
       },
     )
-
-    // onValue returns unsubscribe function in web SDK; but Firebase v9 onValue returns the function remove? we don't call here to keep listener
     return () => unsub && typeof unsub === "function" && unsub()
   }, [])
 
-  // ---------- Helpers de status e valores ----------
-  // status interno esperado: "nao_recebido", "pendente", "pago"
+  // ---------- FUNÇÃO WHATSAPP ----------
+  const entrarEmContatoWhatsApp = (jovem) => {
+    if (!jovem.dadosJovem?.telefone) {
+      alert("Número de telefone não cadastrado para este jovem.")
+      return
+    }
+
+    const numero = jovem.dadosJovem.telefone.replace(/\D/g, "")
+    const url = `https://wa.me/${numero}`
+    window.open(url, "_blank")
+  }
+
+  // ---------- FUNÇÃO PARA ADICIONAR TELEFONE PADRÃO ----------
+  const adicionarTelefonePadrao = async () => {
+    const jovensRef = ref(db, "jovens")
+    const snapshot = await get(jovensRef)
+    if (!snapshot.exists()) return
+
+    const dados = snapshot.val()
+    for (const [id, jovem] of Object.entries(dados)) {
+      if (!jovem.dadosJovem?.telefone) {
+        await update(ref(db, `jovens/${id}/dadosJovem`), {
+          telefone: "5511999999999",
+        })
+      }
+    }
+    alert("Telefones adicionados com sucesso!")
+  }
+
+  // ---------- FUNÇÕES DE STATUS E PAGAMENTO ----------
   const getStatusPagamentoMeta = (jovem) => {
-    // se está pago -> pago
     if (jovem.statusPagamento === "pago")
-      return { status: "pago", cor: "text-green-600 bg-green-50", label: "Pago" }
-
-    // se recebeu boleto (dataBoletoRecebido) ou status pendente -> pendente de pagamento
+      return {
+        status: "pago",
+        cor: "text-emerald-700 bg-emerald-50/80 border border-emerald-200/60",
+        label: "Pago",
+        icon: CheckCircle,
+      }
     if (jovem.statusPagamento === "pendente" || jovem.dataBoletoRecebido)
-      return { status: "pendente", cor: "text-yellow-600 bg-yellow-50", label: "Pendente de pagamento" }
-
-    // se não tem vencimento -> sem dia
+      return {
+        status: "pendente",
+        cor: "text-amber-700 bg-amber-50/80 border border-amber-200/60",
+        label: "Pendente",
+        icon: AlertCircle,
+      }
     if (!jovem.cursoTecnico?.diaVencimento)
-      return { status: "nao_recebido", cor: "text-blue-600 bg-blue-50", label: "Sem dia definido" }
+      return {
+        status: "nao_recebido",
+        cor: "text-slate-600 bg-slate-50/80 border border-slate-200/60",
+        label: "Aguardando",
+        icon: Calendar,
+      }
 
-    // calcula dias para vencimento - apenas para exibir 'desconto' ou 'vencido' em casos visuais
     const hoje = new Date()
     const venc = new Date(jovem.cursoTecnico.diaVencimento)
     venc.setFullYear(hoje.getFullYear())
     const diasRestantes = Math.ceil((venc - hoje) / (1000 * 60 * 60 * 24))
 
-    if (diasRestantes < 0) return { status: "vencido", cor: "text-red-600 bg-red-50", label: "Vencido" }
-    if (diasRestantes <= 5) return { status: "desconto", cor: "text-purple-600 bg-purple-50", label: "Com desconto" }
-
-    return { status: "nao_recebido", cor: "text-blue-600 bg-blue-50", label: "Boleto não recebido" }
+    if (diasRestantes < 0)
+      return {
+        status: "vencido",
+        cor: "text-rose-700 bg-rose-50/80 border border-rose-200/60",
+        label: "Vencido",
+        icon: AlertCircle,
+      }
+    if (diasRestantes <= 5)
+      return {
+        status: "desconto",
+        cor: "text-blue-700 bg-blue-50/80 border border-blue-200/60",
+        label: "Desconto",
+        icon: DollarSign,
+      }
+    return {
+      status: "nao_recebido",
+      cor: "text-slate-600 bg-slate-50/80 border border-slate-200/60",
+      label: "Não recebido",
+      icon: FileText,
+    }
   }
 
-  // calcula valor que será cobrado no pagamento (aplica desconto 10% se faltam >=5 dias)
   const calcularValorPagamento = (jovem, referenciaData = new Date()) => {
     const valorOriginal = Number.parseFloat(jovem.cursoTecnico?.valorMensalidade || 0)
     if (!jovem.cursoTecnico?.diaVencimento) return valorOriginal
@@ -93,19 +138,13 @@ export default function PagamentosCards() {
     venc.setFullYear(referenciaData.getFullYear())
     const diasRestantes = Math.ceil((venc - referenciaData) / (1000 * 60 * 60 * 24))
 
-    if (diasRestantes >= 5) return Number((valorOriginal * 0.9).toFixed(2)) // 10% desconto
-    if (diasRestantes < 0) return Number(valorOriginal.toFixed(2)) // já venceu -> valor cheio
-    return Number(valorOriginal.toFixed(2)) // se estiver entre 0 e 4 dias -> sem desconto (conforme sua regra)
+    if (diasRestantes >= 5) return Number((valorOriginal * 0.9).toFixed(2))
+    return Number(valorOriginal.toFixed(2))
   }
 
-  // Recebe (marca) boleto — esse é o fluxo que você pediu:
-  // ao clicar, marcamos dataBoletoRecebido e statusPayment -> "pendente"
   const receberBoleto = async (jovem) => {
     const hojeISO = new Date().toISOString()
-    const atualizacao = {
-      dataBoletoRecebido: hojeISO,
-      statusPagamento: "pendente", // pendente de pagamento (recebido mas ainda não pago)
-    }
+    const atualizacao = { dataBoletoRecebido: hojeISO, statusPagamento: "pendente" }
     try {
       await update(ref(db, `jovens/${jovem.id}`), atualizacao)
       setJovens((prev) => prev.map((j) => (j.id === jovem.id ? { ...j, ...atualizacao } : j)))
@@ -114,13 +153,11 @@ export default function PagamentosCards() {
     }
   }
 
-  // Marca como pago (individual)
   const marcarComoPago = async (jovem) => {
     const hojeISO = new Date().toISOString()
-    const valorPago = calcularValorPagamento(jovem, new Date()) // usa data atual para definir desconto
+    const valorPago = calcularValorPagamento(jovem, new Date())
     const totalParcelas = (Number.parseInt(jovem.cursoTecnico?.parcelas) || 1) - 1
     const parcelasPagas = (Number.parseInt(jovem.parcelasPagas) || 0) + 1
-
     const atualizacao = {
       statusPagamento: "pago",
       parcelasPagas,
@@ -130,7 +167,6 @@ export default function PagamentosCards() {
     }
     try {
       await update(ref(db, `jovens/${jovem.id}`), atualizacao)
-      // registrar historico
       await push(ref(db, `historicoPagamentos`), {
         jovemId: jovem.id,
         jovemNome: jovem.dadosJovem?.nome,
@@ -139,28 +175,23 @@ export default function PagamentosCards() {
         tipo: "pagamento",
         numeroBoleto: jovem.ultimoBoleto || "N/A",
       })
-      // atualizar local
       setJovens((prev) => prev.map((j) => (j.id === jovem.id ? { ...j, ...atualizacao } : j)))
-      // remover da seleção caso estivesse
       setSelecionados((prev) => prev.filter((id) => id !== jovem.id))
     } catch (err) {
       console.error("Erro ao marcar como pago:", err)
     }
   }
 
-  // Seleciona/desseleciona checkbox
   const toggleSelecionado = (id) => {
     if (selecionados.includes(id)) setSelecionados((prev) => prev.filter((i) => i !== id))
     else setSelecionados((prev) => [...prev, id])
   }
 
-  // Seleciona todos os que estão PENDENTES (ou seja, já receberam boleto e aguardam pagamento)
   const selecionarTodosPendentes = () => {
     const idsPendentes = jovens.filter((j) => j.statusPagamento === "pendente").map((j) => j.id)
     setSelecionados(idsPendentes)
   }
 
-  // Pagamento em lote (confirmação via modal é tratada no JSX — aqui aplicamos as atualizações)
   const pagarEmLote = async () => {
     const hojeISO = new Date().toISOString()
     const updates = []
@@ -180,10 +211,7 @@ export default function PagamentosCards() {
           dataRecebimento: hojeISO,
         }
 
-        // Atualiza no Firebase
         await update(ref(db, `jovens/${jovem.id}`), att)
-
-        // Historico
         await push(ref(db, `historicoPagamentos`), {
           jovemId: jovem.id,
           jovemNome: jovem.dadosJovem?.nome,
@@ -195,14 +223,12 @@ export default function PagamentosCards() {
 
         updates.push({ id: jovem.id, att })
       }
-
-      // Atualiza local state de uma vez
-      setJovens((prev) => prev.map((j) => {
-        const find = updates.find(u => u.id === j.id)
-        return find ? { ...j, ...find.att } : j
-      }))
-
-      // limpa seleção e fecha modal
+      setJovens((prev) =>
+        prev.map((j) => {
+          const find = updates.find((u) => u.id === j.id)
+          return find ? { ...j, ...find.att } : j
+        }),
+      )
       setSelecionados([])
       setModalAberta(false)
       alert("Pagamentos em lote realizados com sucesso.")
@@ -212,74 +238,7 @@ export default function PagamentosCards() {
     }
   }
 
-  // Exporta para Excel todos os que NÃO RECEBERAM boleto (status 'nao_recebido' ou sem dataBoletoGerado)
-  const exportarNaoRecebidosParaExcel = () => {
-    const listaExport = jovens
-      .filter((j) => !j.dataBoletoRecebido && j.statusPagamento !== "pendente" && j.statusPagamento !== "pago")
-      .map((j) => ({
-        Nome: j.dadosJovem?.nome || "-",
-        CPF: j.dadosJovem?.cpf || "-",
-        Projeto: j.projeto || "-",
-        Curso: j.cursoTecnico?.nomeCurso || "-",
-        ValorOriginal: j.cursoTecnico?.valorMensalidade || 0,
-        DiaVencimento: j.cursoTecnico?.diaVencimento || "-",
-        Status: getStatusPagamentoMeta(j).label,
-      }))
-
-    const ws = XLSX.utils.json_to_sheet(listaExport)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "NaoRecebidos")
-    XLSX.writeFile(wb, `boletos_nao_recebidos_${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
-
-  // Exporta os jovens filtrados (útil para debug/exportar lista atual)
-  const exportarFiltradosParaExcel = (lista) => {
-    const listaExport = lista.map((j) => ({
-      Nome: j.dadosJovem?.nome || "-",
-      CPF: j.dadosJovem?.cpf || "-",
-      Projeto: j.projeto || "-",
-      Curso: j.cursoTecnico?.nomeCurso || "-",
-      DiaVencimento: j.cursoTecnico?.diaVencimento || "-",
-      Status: getStatusPagamentoMeta(j).label,
-      ValorCobrado: calcularValorPagamento(j),
-      UltimoBoleto: j.ultimoBoleto || "-",
-    }))
-    const ws = XLSX.utils.json_to_sheet(listaExport)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, "Export")
-    XLSX.writeFile(wb, `export_pagamentos_${new Date().toISOString().slice(0, 10)}.xlsx`)
-  }
-
-  // ---------- Métricas para dashboard ----------
-  const calcularMetricas = () => {
-    const totalReceber = jovens
-      .filter((j) => ["pendente", "nao_recebido", "desconto", "vencido"].includes(getStatusPagamentoMeta(j).status))
-      .reduce((acc, j) => acc + calcularValorPagamento(j), 0)
-
-    const totalRecebido = jovens.filter((j) => j.statusPagamento === "pago").reduce((acc, j) => acc + (Number.parseFloat(j.valorPago) || 0), 0)
-
-    const totalVencido = jovens.filter((j) => getStatusPagamentoMeta(j).status === "vencido").reduce((acc, j) => acc + calcularValorPagamento(j), 0)
-
-    const totalPendente = jovens.filter((j) => j.statusPagamento === "pendente").reduce((acc, j) => acc + calcularValorPagamento(j), 0)
-
-    const qtdPagos = jovens.filter((j) => j.statusPagamento === "pago").length
-    const qtdPendentes = jovens.filter((j) => j.statusPagamento === "pendente").length
-    const qtdVencidos = jovens.filter((j) => getStatusPagamentoMeta(j).status === "vencido").length
-
-    return {
-      totalReceber,
-      totalRecebido,
-      totalVencido,
-      totalPendente,
-      qtdPagos,
-      qtdPendentes,
-      qtdVencidos,
-      totalAlunos: jovens.length,
-    }
-  }
-  const metricas = calcularMetricas()
-
-  // ---------- Filtros aplicados ----------
+  // ---------- Filtragem ----------
   const jovensFiltrados = jovens.filter((j) => {
     const termo = filtroUnificado.toLowerCase()
     const matchTexto =
@@ -292,352 +251,258 @@ export default function PagamentosCards() {
     const matchStatus = filtroStatus === "todos" || status === filtroStatus
 
     let matchData = true
-    if (filtroDataInicio && j.cursoTecnico?.diaVencimento) {
-      const dataVenc = new Date(j.cursoTecnico.diaVencimento)
+    if (filtroDataInicio) {
       const dataInicio = new Date(filtroDataInicio)
+      const dataVenc = new Date(j.cursoTecnico?.anoConclusao || new Date())
       matchData = dataVenc >= dataInicio
     }
-    if (filtroDataFim && j.cursoTecnico?.diaVencimento) {
-      const dataVenc = new Date(j.cursoTecnico.diaVencimento)
+    if (filtroDataFim) {
       const dataFim = new Date(filtroDataFim)
+      const dataVenc = new Date(j.cursoTecnico?.anoConclusao || new Date())
       matchData = matchData && dataVenc <= dataFim
     }
 
     return matchTexto && matchStatus && matchData
   })
 
-  // ---------- Render ----------
-  if (loading) {
+  // ---------- Renderização ----------
+  if (loading)
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-3"></div>
-          <p>Carregando dados...</p>
+          <div className="inline-block h-12 w-12 animate-spin rounded-full border-4 border-solid border-blue-600 border-r-transparent"></div>
+          <p className="mt-6 text-slate-700 font-semibold text-lg">Carregando dados financeiros...</p>
         </div>
       </div>
     )
-  }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 bg-gradient-to-br from-slate-50 to-blue-50">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row md:justify-between items-start md:items-center gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <BarChart3 className="h-6 w-6 text-blue-600" />
-            Painel de Pagamentos
-          </h1>
-          <p className="text-sm text-gray-600">Controle de boletos — receber, pagar, exportar</p>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setMostrarDashboard(!mostrarDashboard)}
-            className="px-4 py-2 bg-gray-600 text-white rounded"
-          >
-            {mostrarDashboard ? "Ocultar" : "Mostrar"} Dashboard
-          </button>
-          <button onClick={() => exportarFiltradosParaExcel(jovensFiltrados)} className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Exportar Filtrados
-          </button>
-          <button onClick={exportarNaoRecebidosParaExcel} className="px-4 py-2 bg-yellow-600 text-white rounded">
-            Exportar Não Recebidos
-          </button>
-        </div>
-      </div>
-
-      {/* DASHBOARD */}
-      {mostrarDashboard && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl shadow p-4 border-l-4 border-blue-500">
-            <p className="text-sm text-gray-600">Total a Receber</p>
-            <p className="text-xl font-bold">R$ {metricas.totalReceber.toFixed(2)}</p>
-            <p className="text-xs text-gray-500 mt-1">{metricas.qtdPendentes} pendentes</p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4 border-l-4 border-green-500">
-            <p className="text-sm text-gray-600">Total Recebido</p>
-            <p className="text-xl font-bold">R$ {metricas.totalRecebido.toFixed(2)}</p>
-            <p className="text-xs text-gray-500 mt-1">{metricas.qtdPagos} pagos</p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4 border-l-4 border-red-500">
-            <p className="text-sm text-gray-600">Total Vencido</p>
-            <p className="text-xl font-bold">R$ {metricas.totalVencido.toFixed(2)}</p>
-          </div>
-          <div className="bg-white rounded-xl shadow p-4 border-l-4 border-purple-500">
-            <p className="text-sm text-gray-600">Total Alunos</p>
-            <p className="text-xl font-bold">{metricas.totalAlunos}</p>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-slate-50">
+      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+        <div className="mb-8 lg:mb-10">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 mb-2 tracking-tight">Gestão Financeira</h1>
+              <p className="text-slate-600 text-base lg:text-lg">Controle e acompanhamento de pagamentos</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="bg-white px-4 py-2 rounded-lg border border-slate-200 shadow-sm">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">Total de Registros</p>
+                <p className="text-2xl font-bold text-slate-900 mt-0.5">{jovensFiltrados.length}</p>
+              </div>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* AÇÕES / FILTROS */}
-      <div className="bg-white rounded-xl p-4 shadow mb-6">
-        <div className="flex flex-col lg:flex-row gap-3">
-          <div className="flex-1 relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar por nome, projeto, curso ou escola..."
-              value={filtroUnificado}
-              onChange={(e) => setFiltroUnificado(e.target.value)}
-              className="w-full pl-10 pr-3 py-2 border rounded"
-            />
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200/80 p-5 lg:p-7 mb-6 lg:mb-8">
+          <div className="flex items-center gap-3 mb-5">
+            <div className="p-2 bg-blue-50 rounded-lg">
+              <Filter className="h-5 w-5 text-blue-600" />
+            </div>
+            <h2 className="text-lg lg:text-xl font-bold text-slate-900">Filtros Avançados</h2>
           </div>
 
-          <select value={filtroStatus} onChange={(e) => setFiltroStatus(e.target.value)} className="px-3 py-2 border rounded">
-            <option value="todos">Todos os Status</option>
-            <option value="pendente">Pendente de pagamento</option>
-            <option value="pago">Pago</option>
-            <option value="vencido">Vencido</option>
-            <option value="desconto">Com Desconto</option>
-            <option value="nao_recebido">Boleto não recebido</option>
-          </select>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="sm:col-span-2 lg:col-span-1">
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Busca Geral</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Nome, projeto, curso..."
+                  value={filtroUnificado}
+                  onChange={(e) => setFiltroUnificado(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+                />
+              </div>
+            </div>
 
-          <input type="date" value={filtroDataInicio} onChange={(e) => setFiltroDataInicio(e.target.value)} className="px-3 py-2 border rounded" />
-          <input type="date" value={filtroDataFim} onChange={(e) => setFiltroDataFim(e.target.value)} className="px-3 py-2 border rounded" />
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Status</label>
+              <select
+                value={filtroStatus}
+                onChange={(e) => setFiltroStatus(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white appearance-none cursor-pointer"
+              >
+                <option value="todos">Todos os status</option>
+                <option value="pago">✓ Pago</option>
+                <option value="pendente">⏳ Pendente</option>
+                <option value="vencido">⚠ Vencido</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Data Início</label>
+              <input
+                type="date"
+                value={filtroDataInicio}
+                onChange={(e) => setFiltroDataInicio(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-2">Data Fim</label>
+              <input
+                type="date"
+                value={filtroDataFim}
+                onChange={(e) => setFiltroDataFim(e.target.value)}
+                className="w-full px-4 py-3 border border-slate-300 rounded-lg text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="flex gap-2 mt-4">
-          <button onClick={selecionarTodosPendentes} className="px-4 py-2 bg-yellow-500 text-white rounded flex items-center gap-2">
-            <CheckCircle className="h-4 w-4" />
-            Selecionar Pendentes
-          </button>
-          <button
-            onClick={() => setModalAberta(true)}
-            disabled={selecionados.length === 0}
-            className={`px-4 py-2 text-white rounded flex items-center gap-2 ${selecionados.length === 0 ? "bg-gray-300" : "bg-blue-600"}`}
-          >
-            <CreditCard className="h-4 w-4" />
-            Pagar Selecionados ({selecionados.length})
-          </button>
-          <button onClick={() => exportarFiltradosParaExcel(jovensFiltrados)} className="px-4 py-2 bg-green-600 text-white rounded flex items-center gap-2">
-            <Download className="h-4 w-4" />
-            Exportar (filtrados)
-          </button>
-        </div>
-      </div>
-
-      {/* LISTAGEM: CARDS ou TABELA */}
-      {visualizacao === "cards" ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 lg:gap-6">
           {jovensFiltrados.map((jovem) => {
-            const meta = getStatusPagamentoMeta(jovem)
-            const valorPagamento = calcularValorPagamento(jovem)
-            const isSelecionado = selecionados.includes(jovem.id)
+            const statusMeta = getStatusPagamentoMeta(jovem)
+            const StatusIcon = statusMeta.icon
+
             return (
-              <div key={jovem.id} className={`bg-white rounded-xl p-4 shadow relative border-2 ${isSelecionado ? "border-blue-500 ring-2 ring-blue-100" : "border-gray-100"}`}>
-                <div className="absolute top-3 right-3">
-                  <input
-                    type="checkbox"
-                    checked={isSelecionado}
-                    onChange={() => toggleSelecionado(jovem.id)}
-                    disabled={jovem.statusPagamento !== "pendente"}
-                  />
+              <div
+                key={jovem.id}
+                className={`relative bg-white rounded-xl shadow-sm border transition-all duration-300 hover:shadow-lg hover:-translate-y-1 ${
+                  selecionados.includes(jovem.id)
+                    ? "border-blue-500 ring-2 ring-blue-100 shadow-md"
+                    : "border-slate-200/80"
+                }`}
+              >
+                <div className="p-5 lg:p-6 border-b border-slate-100">
+                  <div className="flex items-start justify-between gap-3 mb-4">
+                    <span
+                      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide ${statusMeta.cor}`}
+                    >
+                      <StatusIcon className="h-3.5 w-3.5" />
+                      {statusMeta.label}
+                    </span>
+
+                    <input
+                      type="checkbox"
+                      checked={selecionados.includes(jovem.id)}
+                      onChange={() => toggleSelecionado(jovem.id)}
+                      disabled={jovem.statusPagamento !== "pendente"}
+                      className="h-5 w-5 rounded border-slate-300 text-blue-600 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-all"
+                    />
+                  </div>
+
+                  <h3 className="font-bold text-xl text-slate-900 leading-tight mb-3">
+                    {jovem.dadosJovem?.nome || "-"}
+                  </h3>
+
+                  <div className="space-y-2">
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[70px]">
+                        Projeto:
+                      </span>
+                      <span className="text-sm font-medium text-slate-700">{jovem.projeto || "-"}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[70px]">
+                        Curso:
+                      </span>
+                      <span className="text-sm font-medium text-slate-700">{jovem.cursoTecnico?.nomeCurso || "-"}</span>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wide min-w-[70px]">
+                        Vencto:
+                      </span>
+                      <span className="text-sm font-medium text-slate-700">
+                        {jovem.cursoTecnico?.diaVencimento || "-"}
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${meta.cor} w-fit`}>
-                  {meta.label}
-                </span>
-
-                <h3 className="mt-3 font-bold text-lg">{jovem.dadosJovem?.nome || "-"}</h3>
-                <p className="text-sm text-gray-600">Turma {jovem.dadosJovem?.turma || "-"}</p>
-                <p className="text-sm text-gray-600">{jovem.dadosJovem?.projeto || "-"}</p>
-                <p className="text-sm text-gray-600">{jovem.cursoTecnico?.nomeCurso || "-"}</p>
-                <p className="text-sm text-gray-600">Vencimento: {jovem.cursoTecnico?.diaVencimento || "-"}</p>
-                {jovem.ultimoBoleto && <p className="text-sm text-gray-600">Boleto: {jovem.ultimoBoleto}</p>}
-
-                <div className="mt-3 pt-3 border-t border-gray-100">
-                  <p className="text-lg font-bold">R$ {valorPagamento.toFixed(2)}</p>
-                  {valorPagamento < Number.parseFloat(jovem.cursoTecnico?.valorMensalidade || 0) && (
-                    <p className="text-xs text-green-600">Desconto de 10% aplicado</p>
-                  )}
+                <div className="px-5 lg:px-6 py-4 bg-gradient-to-br from-slate-50 to-blue-50/30">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-600 uppercase tracking-wide">Valor</span>
+                    <DollarSign className="h-4 w-4 text-slate-400" />
+                  </div>
+                  <p className="text-3xl font-bold text-slate-900 mt-1 tracking-tight">
+                    R$ {calcularValorPagamento(jovem).toFixed(2).replace(".", ",")}
+                  </p>
                 </div>
 
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  {/* Se boleto ainda NÃO foi recebido: mostrar botão para receber */}
+                <div className="p-5 lg:p-6 space-y-3">
                   {!jovem.dataBoletoRecebido && (
                     <button
                       onClick={() => receberBoleto(jovem)}
-                      className="flex-1 px-3 py-2 bg-yellow-500 text-white rounded-lg hover:bg-yellow-600 text-xs font-medium"
+                      className="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md"
                     >
-                      <FileText className="h-3 w-3 mr-1 inline" />
+                      <FileText className="h-4 w-4" />
                       Receber Boleto
                     </button>
                   )}
 
-                  {/* Se já recebeu (statusPagamento pendente) → mostrar marcar como pago */}
-                  {(jovem.statusPagamento === "pendente" || (jovem.dataBoletoRecebido && jovem.statusPagamento !== "pago")) && (
+                  {(jovem.statusPagamento === "pendente" ||
+                    (jovem.dataBoletoRecebido && jovem.statusPagamento !== "pago")) && (
                     <button
                       onClick={() => marcarComoPago(jovem)}
-                      className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-medium flex items-center justify-center gap-1"
+                      className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 active:from-blue-800 active:to-blue-900 text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-sm hover:shadow-md"
                     >
-                      <CheckCircle className="h-3 w-3" />
-                      Marcar como Pago
+                      <CheckCircle className="h-4 w-4" />
+                      Confirmar Pagamento
                     </button>
                   )}
 
-                  {/* Se já pago */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => {
+                        setJovemSelecionadoBoleto(jovem)
+                        setModalBoleto(true)
+                      }}
+                      className="px-4 py-3 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 active:bg-slate-300 text-sm font-bold flex items-center justify-center gap-2 transition-all border border-slate-200"
+                    >
+                      <FileText className="h-4 w-4" />
+                      Boleto
+                    </button>
+
+                    <button
+                      onClick={() => entrarEmContatoWhatsApp(jovem)}
+                      className="px-4 py-3 bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white rounded-lg flex items-center justify-center gap-2 text-sm font-bold shadow-sm hover:shadow-md transition-all"
+                    >
+                      <Users className="h-4 w-4" />
+                      Contato
+                    </button>
+                  </div>
+
                   {jovem.statusPagamento === "pago" && (
-                    <div className="flex-1 text-center">
-                      <span className="text-green-600 font-semibold text-sm flex items-center justify-center gap-1">
-                        <CheckCircle className="h-4 w-4" />
-                        Pagamento Confirmado
-                      </span>
+                    <div className="mt-4 bg-gradient-to-r from-emerald-50 to-emerald-100/50 rounded-lg p-4 border border-emerald-200">
+                      <div className="flex items-center justify-center gap-2 mb-2">
+                        <CheckCircle className="h-5 w-5 text-emerald-600" />
+                        <span className="text-emerald-800 font-bold text-sm uppercase tracking-wide">
+                          Pagamento Confirmado
+                        </span>
+                      </div>
                       {jovem.dataRecebimento && (
-                        <p className="text-xs text-gray-500 mt-1">{new Date(jovem.dataRecebimento).toLocaleDateString("pt-BR")}</p>
+                        <p className="text-center text-xs text-emerald-700 font-semibold">
+                          {new Date(jovem.dataRecebimento).toLocaleDateString("pt-BR", {
+                            day: "2-digit",
+                            month: "long",
+                            year: "numeric",
+                          })}
+                        </p>
                       )}
                     </div>
                   )}
-
                 </div>
               </div>
             )
           })}
         </div>
-      ) : (
-        // TABELA
-        <div className="bg-white rounded-xl shadow overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
-              <tr>
-                <th className="p-3"><input type="checkbox" onChange={(e) => {
-                  if (e.target.checked) {
-                    const ids = jovensFiltrados.filter(j => j.statusPagamento === "pendente").map(j => j.id)
-                    setSelecionados(ids)
-                  } else setSelecionados([])
-                }} /></th>
-                <th className="p-3 text-left">Nome</th>
-                <th className="p-3 text-left">Projeto</th>
-                <th className="p-3 text-left">Curso</th>
-                <th className="p-3 text-left">Vencimento</th>
-                <th className="p-3 text-left">Status</th>
-                <th className="p-3 text-left">Valor</th>
-                <th className="p-3 text-left">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jovensFiltrados.map(jovem => {
-                const meta = getStatusPagamentoMeta(jovem)
-                const valorPagamento = calcularValorPagamento(jovem)
-                const isSelecionado = selecionados.includes(jovem.id)
-                return (
-                  <tr key={jovem.id} className={isSelecionado ? "bg-blue-50" : "hover:bg-gray-50"}>
-                    <td className="p-3"><input type="checkbox" checked={isSelecionado} onChange={() => toggleSelecionado(jovem.id)} disabled={jovem.statusPagamento !== "pendente"} /></td>
-                    <td className="p-3">{jovem.dadosJovem?.nome}</td>
-                    <td className="p-3">{jovem.dadosJovem?.projeto}</td>
-                    <td className="p-3">{jovem.cursoTecnico?.nomeCurso}</td>
-                    <td className="p-3">{jovem.cursoTecnico?.diaVencimento || "-"}</td>
-                    <td className="p-3"><span className={`px-2 py-1 rounded text-sm ${meta.cor}`}>{meta.label}</span></td>
-                    <td className="p-3">R$ {valorPagamento.toFixed(2)}</td>
-                    <td className="p-3">
-                      <div className="flex gap-2">
-                        {!jovem.dataBoletoRecebido && (
-                          <button onClick={() => receberBoleto(jovem)} className="px-2 py-1 bg-yellow-500 text-white rounded text-xs">Receber</button>
-                        )}
-                        {(jovem.statusPagamento === "pendente" || (jovem.dataBoletoRecebido && jovem.statusPagamento !== "pago")) && (
-                          <button onClick={() => marcarComoPago(jovem)} className="px-2 py-1 bg-blue-600 text-white rounded text-xs">Pagar</button>
-                        )}
-                        <button onClick={() => { setJovemSelecionadoBoleto(jovem); setModalBoleto(true) }} className="px-2 py-1 bg-purple-500 text-white rounded text-xs">Boleto</button>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
 
-      {/* MODAL: Pagamento em lote */}
-      {modalAberta && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-xl max-w-2xl w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Confirmar Pagamento em Lote</h2>
-              <button onClick={() => setModalAberta(false)} className="text-gray-500 hover:text-gray-700"><X className="h-6 w-6" /></button>
+        {jovensFiltrados.length === 0 && (
+          <div className="text-center py-20 bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-slate-100 mb-6">
+              <CreditCard className="h-10 w-10 text-slate-400" />
             </div>
-
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
-              {selecionados.map(id => {
-                const j = jovens.find(x => x.id === id)
-                if (!j) return null
-                return (
-                  <div key={id} className="flex justify-between items-center bg-gray-50 p-3 rounded">
-                    <div>
-                      <p className="font-medium">{j.dadosJovem?.nome}</p>
-                      <p className="text-xs text-gray-500">{j.cursoTecnico?.nomeCurso}</p>
-                    </div>
-                    <span className="font-semibold">R$ {calcularValorPagamento(j).toFixed(2)}</span>
-                  </div>
-                )
-              })}
-            </div>
-
-            <div className="flex justify-between items-center mt-6 pt-4 border-t">
-              <span className="font-bold">Total:</span>
-              <span className="text-blue-600 font-bold">
-                R$ {selecionados.reduce((acc, id) => {
-                  const j = jovens.find(x => x.id === id)
-                  return j ? acc + calcularValorPagamento(j) : acc
-                }, 0).toFixed(2)}
-              </span>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-4">
-              <button onClick={() => setModalAberta(false)} className="px-4 py-2 bg-gray-300 rounded">Cancelar</button>
-              <button onClick={pagarEmLote} className="px-4 py-2 bg-green-600 text-white rounded">Confirmar Pagamento</button>
-            </div>
+            <h3 className="text-xl font-bold text-slate-900 mb-2">Nenhum registro encontrado</h3>
+            <p className="text-slate-600 max-w-md mx-auto">
+              Ajuste os filtros acima para visualizar diferentes resultados ou verifique se há dados cadastrados no
+              sistema.
+            </p>
           </div>
-        </div>
-      )}
-
-      {/* MODAL: Gerar / Receber boleto individual */}
-      {modalBoleto && jovemSelecionadoBoleto && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-xl max-w-md w-full">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Boleto - {jovemSelecionadoBoleto.dadosJovem?.nome}</h2>
-              <button onClick={() => { setModalBoleto(false); setJovemSelecionadoBoleto(null) }} className="text-gray-500 hover:text-gray-700"><X className="h-6 w-6" /></button>
-            </div>
-
-            <div className="space-y-2">
-              <p className="text-sm text-gray-600">Curso: {jovemSelecionadoBoleto.cursoTecnico?.nomeCurso}</p>
-              <p className="text-sm text-gray-600">Vencimento: {jovemSelecionadoBoleto.cursoTecnico?.diaVencimento || "-"}</p>
-              <p className="text-sm text-gray-600">Valor Original: R$ {Number.parseFloat(jovemSelecionadoBoleto.cursoTecnico?.valorMensalidade || 0).toFixed(2)}</p>
-              <p className="text-lg font-bold text-green-700">Valor a cobrar (com regra de desconto): R$ {calcularValorPagamento(jovemSelecionadoBoleto).toFixed(2)}</p>
-            </div>
-
-            <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => { setModalBoleto(false); setJovemSelecionadoBoleto(null) }} className="px-4 py-2 bg-gray-300 rounded">Cancelar</button>
-
-              {/* Se boleto ainda NÃO foi recebido, permite marcar como recebido (receberBoleto) */}
-              {!jovemSelecionadoBoleto.dataBoletoRecebido ? (
-                <button onClick={() => { receberBoleto(jovemSelecionadoBoleto); setModalBoleto(false); setJovemSelecionadoBoleto(null) }} className="px-4 py-2 bg-yellow-500 text-white rounded">
-                  Marcar Boleto como Recebido
-                </button>
-              ) : (
-                // caso já tenha sido recebido, permitir gerar novo boleto (opcional) ou mostrar marcar como pago
-                <>
-                  <button onClick={() => gerarBoleto(jovemSelecionadoBoleto)} className="px-4 py-2 bg-purple-600 text-white rounded">Gerar Novo Boleto</button>
-                  {jovemSelecionadoBoleto.statusPagamento !== "pago" && (
-                    <button onClick={() => { marcarComoPago(jovemSelecionadoBoleto); setModalBoleto(false); setJovemSelecionadoBoleto(null) }} className="px-4 py-2 bg-blue-600 text-white rounded">Marcar como Pago</button>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* RODAPÉ / LEGENDA */}
-      <div className="mt-6 bg-white rounded-xl p-4 shadow">
-        <h3 className="font-semibold mb-2">Legenda</h3>
-        <div className="flex gap-4 flex-wrap text-sm">
-          <div className="flex items-center gap-2"><span className="w-4 h-4 bg-yellow-50 border-2 border-yellow-600 rounded-full"></span>Pendente (boleto recebido)</div>
-          <div className="flex items-center gap-2"><span className="w-4 h-4 bg-blue-50 border-2 border-blue-600 rounded-full"></span>Boleto não recebido / Pendente</div>
-          <div className="flex items-center gap-2"><span className="w-4 h-4 bg-red-50 border-2 border-red-600 rounded-full"></span>Vencido</div>
-          <div className="flex items-center gap-2"><span className="w-4 h-4 bg-green-50 border-2 border-green-600 rounded-full"></span>Pago</div>
-        </div>
+        )}
       </div>
     </div>
   )
