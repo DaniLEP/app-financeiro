@@ -7,6 +7,7 @@ import CadastroJovem from './pages/register/jovem'
 import TabelaBoletos from './pages/boletos'
 import Home from './pages/Home'
 import VisualizarJovensAvancado from './pages/views/jovens'
+import FimContratoDashboard from './pages/boletos/fimContrato'
 
 const App = lazy(() => import('./App.jsx'))
 const Login = lazy(() => import('./pages/Login/index'))
@@ -53,6 +54,7 @@ const router = createBrowserRouter([
       { path: 'cadastrojovem', element: <CadastroJovem /> },
       { path: 'listacadastrojovens', element: <VisualizarJovensAvancado /> },
       { path: 'boletos', element: <TabelaBoletos /> },
+      { path: 'contrato-finalizado', element: <FimContratoDashboard />}
     ],
   },
 ])

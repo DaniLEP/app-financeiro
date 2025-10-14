@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { ref, onValue } from "firebase/database";
 import { db } from "../../../firebase";
+import { version } from "react-dom";
 
 export default function Home() {
   const [stats, setStats] = useState([]);
@@ -46,6 +47,14 @@ export default function Home() {
       icon: CreditCard,
       description: "Acompanhe pagamentos realizados",
       category: "Financeiro",
+      color: "amber",
+    },
+        {
+      label: "Contratos Finalizados",
+      path: "/contrato-finalizado",
+      icon: CheckCircle2,
+      description: "Acompanhe os contratos que foram finalizados",
+      category: "Contratos",
       color: "amber",
     },
   ];
