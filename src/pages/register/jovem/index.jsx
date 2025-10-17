@@ -239,8 +239,9 @@ const handleSubmit = async (e) => {
         valorMensalidade: "",
         diaVencimento: "",
         valorDesconto: "",
-        totalParcelas: "", // reset da quantidade de parcelas
-      },
+        totalParcelas: "", 
+            quantidadeParcelas: "",
+},
     });
     setStep(1);
   } catch (error) {
