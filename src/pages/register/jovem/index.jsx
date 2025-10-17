@@ -1,4 +1,3 @@
-"use client"
 
 import { useState } from "react"
 import { ref, set, get, query, orderByChild, equalTo } from "firebase/database"
@@ -49,10 +48,10 @@ const CadastroJovem = () => {
       valorMensalidade: "",
       diaVencimento: "",
       valorDesconto: "",
+      quantidadeParcelas: "",
     },
   })
 
-  // Formatação CPF/RG
   const formatCPF = (cpf) => {
     const numbers = cpf.replace(/\D/g, "")
     if (numbers.length <= 3) return numbers
@@ -63,13 +62,11 @@ const CadastroJovem = () => {
   const formatRG = (value) => value.replace(/\D/g, "").replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, "$1.$2.$3-$4")
   const cleanCPF = (cpf) => cpf.replace(/\D/g, "")
 
-  // Notificação
   const showNotification = (message, type = "success") => {
     setNotification({ show: true, message, type })
     setTimeout(() => setNotification({ show: false, message: "", type: "" }), 4000)
   }
 
-  // Alteração de campos
   const handleChange = (section, field, value, subField = null) => {
     setFormData((prev) => {
       const updated = { ...prev }
@@ -84,7 +81,6 @@ const CadastroJovem = () => {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }))
   }
 
-  // Busca CEP
   const handleCEPBlur = async (section, subField) => {
     const cep = formData[section][subField].cep.replace(/\D/g, "")
     if (cep.length !== 8) return
@@ -100,7 +96,6 @@ const CadastroJovem = () => {
     }
   }
 
-  // Cálculo idade
   const calcularIdade = (dataNascimento) => {
     if (!dataNascimento) return ""
     const hoje = new Date()
@@ -127,7 +122,6 @@ const CadastroJovem = () => {
     return "INSTITUTO RECICLAR"
   }
 
-  // Validação
   const validateStep = () => {
     const newErrors = {}
     if (step === 1) {
@@ -148,96 +142,114 @@ const CadastroJovem = () => {
         if (!cursoTecnico.valorCurso) newErrors.valorCurso = "Valor do curso é obrigatório"
         if (!cursoTecnico.valorMensalidade) newErrors.valorMensalidade = "Valor da mensalidade é obrigatório"
         if (!cursoTecnico.diaVencimento) newErrors.diaVencimento = "Dia do vencimento é obrigatório"
+        if (!cursoTecnico.quantidadeParcelas) newErrors.quantidadeParcelas = "Valor do desconto é obrigatório"
       }
     }
     setErrors(newErrors)
     return Object.keys(newErrors).length === 0
   }
 
-  // Submit
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    if (!validateStep()) return
-    if (step < 2) {
-      setStep(step + 1)
-      return
-    }
-
-    setIsLoading(true)
-    try {
-      const cpfJovem = cleanCPF(formData.dadosJovem.cpf)
-      const cpfResponsavel = cleanCPF(formData.dadosResponsavel.cpf)
-      const emailJovem = formData.dadosJovem.email.trim().toLowerCase()
-      const emailResponsavel = formData.dadosResponsavel.email.trim().toLowerCase()
-
-      const jovensRef = ref(db, "jovens")
-
-      if ((await get(query(jovensRef, orderByChild("dadosJovem/cpf"), equalTo(cpfJovem)))).exists()) {
-        showNotification("CPF do jovem já cadastrado!", "error")
-        setIsLoading(false)
-        return
-      }
-      if ((await get(query(jovensRef, orderByChild("dadosResponsavel/cpf"), equalTo(cpfResponsavel)))).exists()) {
-        showNotification("CPF do responsável já cadastrado!", "error")
-        setIsLoading(false)
-        return
-      }
-
-      const newKey = Date.now()
-      await set(ref(db, `jovens/${newKey}`), {
-        ...formData,
-        dadosJovem: { ...formData.dadosJovem, cpf: cpfJovem, email: emailJovem },
-        dadosResponsavel: { ...formData.dadosResponsavel, cpf: cpfResponsavel, email: emailResponsavel },
-        dataCadastro: new Date().toISOString(),
-        status: "ativo",
-      })
-
-      showNotification("Cadastro realizado com sucesso!", "success")
-      setFormData({
-        dadosJovem: {
-          nome: "",
-          cpf: "",
-          rg: "",
-          telefone: "",
-          turma: "",
-          email: "",
-          dataNascimento: "",
-          idade: "",
-          projeto: "",
-          endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
-          observacoes: "",
-        },
-        dadosResponsavel: {
-          nome: "",
-          cpf: "",
-          rg: "",
-          telefone: "",
-          email: "",
-          endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
-        },
-        cursoTecnico: {
-          nomeCurso: "",
-          escolaTecnica: "",
-          turno: "",
-          anoInicio: "",
-          anoConclusao: "",
-          razaoSocial: "",
-          nomeFantasia: "",
-          tipoContrato: "",
-          valorCurso: "",
-          valorMensalidade: "",
-          diaVencimento: "",
-          valorDesconto: "",
-        },
-      })
-      setStep(1)
-    } catch (error) {
-      console.error(error)
-      showNotification("Erro ao cadastrar", "error")
-    } finally {
-      setIsLoading(false)
-    }
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  if (!validateStep()) return;
+  if (step < 2) {
+    setStep(step + 1);
+    return;
   }
+
+  setIsLoading(true);
+  try {
+    // Limpa e padroniza CPF e email
+    const cpfJovem = cleanCPF(formData.dadosJovem.cpf);
+    const cpfResponsavel = cleanCPF(formData.dadosResponsavel.cpf);
+    const emailJovem = formData.dadosJovem.email.trim().toLowerCase();
+    const emailResponsavel = formData.dadosResponsavel.email.trim().toLowerCase();
+
+    const jovensRef = ref(db, "jovens");
+
+    // Verifica duplicidade de CPF
+    if ((await get(query(jovensRef, orderByChild("dadosJovem/cpf"), equalTo(cpfJovem)))).exists()) {
+      showNotification("CPF do jovem já cadastrado!", "error");
+      setIsLoading(false);
+      return;
+    }
+    if ((await get(query(jovensRef, orderByChild("dadosResponsavel/cpf"), equalTo(cpfResponsavel)))).exists()) {
+      showNotification("CPF do responsável já cadastrado!", "error");
+      setIsLoading(false);
+      return;
+    }
+
+    // Converte campos monetários e numéricos para Number
+    const cursoTecnicoNumerico = {
+      ...formData.cursoTecnico,
+      valorCurso: formData.cursoTecnico.valorCurso ? Number(formData.cursoTecnico.valorCurso) : 0,
+      valorMensalidade: formData.cursoTecnico.valorMensalidade ? Number(formData.cursoTecnico.valorMensalidade) : 0,
+      valorDesconto: formData.cursoTecnico.valorDesconto ? Number(formData.cursoTecnico.valorDesconto) : 0,
+      totalParcelas: formData.cursoTecnico.totalParcelas ? Number(formData.cursoTecnico.totalParcelas) : 0,
+    };
+
+    // Novo objeto para gravar no Firebase
+    const novoJovem = {
+      ...formData,
+      dadosJovem: { ...formData.dadosJovem, cpf: cpfJovem, email: emailJovem },
+      dadosResponsavel: { ...formData.dadosResponsavel, cpf: cpfResponsavel, email: emailResponsavel },
+      cursoTecnico: cursoTecnicoNumerico,
+      dataCadastro: new Date().toISOString(),
+      status: "ativo"
+    };
+
+    const newKey = Date.now();
+    await set(ref(db, `jovens/${newKey}`), novoJovem);
+
+    showNotification("Cadastro realizado com sucesso!", "success");
+
+    // Reset do formulário
+    setFormData({
+      dadosJovem: {
+        nome: "",
+        cpf: "",
+        rg: "",
+        telefone: "",
+        email: "",
+        dataNascimento: "",
+        idade: "",
+        projeto: "",
+        turma: "",
+        endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
+        observacoes: "",
+      },
+      dadosResponsavel: {
+        nome: "",
+        cpf: "",
+        rg: "",
+        telefone: "",
+        email: "",
+        endereco: { cep: "", rua: "", numero: "", complemento: "", cidade: "", estado: "" },
+      },
+      cursoTecnico: {
+        nomeCurso: "",
+        escolaTecnica: "",
+        turno: "",
+        anoInicio: "",
+        anoConclusao: "",
+        razaoSocial: "",
+        nomeFantasia: "",
+        tipoContrato: "",
+        valorCurso: "",
+        valorMensalidade: "",
+        diaVencimento: "",
+        valorDesconto: "",
+        totalParcelas: "", // reset da quantidade de parcelas
+      },
+    });
+    setStep(1);
+  } catch (error) {
+    console.error(error);
+    showNotification("Erro ao cadastrar", "error");
+  } finally {
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -389,11 +401,10 @@ const CadastroJovem = () => {
                       }}
                       className="h-11"
                     />
-                    <Input
+                  <Input
                       placeholder="Idade"
                       value={formData.dadosJovem.idade}
                       readOnly
-                      blocked
                       className="h-11 bg-gray-50 text-gray-600 cursor-not-allowed"
                     />
 
@@ -642,7 +653,7 @@ const CadastroJovem = () => {
                           )}
                         </div>
 
-                                                <div className="space-y-1 animate-in fade-in duration-300">
+                        <div className="space-y-1 animate-in fade-in duration-300">
                           <Input
                             type="number"
                             placeholder="Valor do Desconto"
@@ -652,6 +663,18 @@ const CadastroJovem = () => {
                           />
                           {errors.valorDesconto && (
                             <p className="text-xs text-red-600 font-medium">{errors.valorDesconto}</p>
+                          )}
+                        </div>
+                        <div className="space-y-1 animate-in fade-in duration-300">
+                          <Input
+                            type="number"
+                            placeholder="Quantidade de Parcelas"
+                            value={formData.cursoTecnico.quantidadeParcelas}
+                            onChange={(e) => handleChange("cursoTecnico", "quantidadeParcelas", e.target.value)}
+                            className={`h-11 ${errors.quantidadeParcelas ? "border-red-500 focus-visible:ring-red-500" : ""}`}
+                          />
+                          {errors.diaVencimento && (
+                            <p className="text-xs text-red-600 font-medium">{errors.diaVencimento}</p>
                           )}
                         </div>
                         <div className="space-y-1 animate-in fade-in duration-300">
